@@ -1,0 +1,43 @@
+/* ============================================================
+   kAIusap — Typography tokens  (STRAWMAN)
+   IBM Plex Sans for prose and UI; IBM Plex Mono for the wordmark,
+   headlines, handles and anything you would type in a terminal.
+   ============================================================ */
+:root {
+  /* ---- Families ---- */
+  --font-site:    'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Aliases */
+  --font-body:    var(--font-site);
+  --font-heading: var(--font-display);
+
+  /* ---- Type scale (rem, 16px root) ---- */
+  --text-2xs:  0.72rem;
+  --text-xs:   0.78rem;   /* eyebrows, captions */
+  --text-sm:   0.875rem;  /* meta, code blocks */
+  --text-base: 1rem;
+  --text-md:   1.0625rem; /* site body default */
+  --text-lg:   1.2rem;    /* feature titles, lead */
+  --text-xl:   1.5rem;
+  --text-2xl:  2rem;      /* section headings */
+  --text-3xl:  2.8rem;
+  --text-4xl:  3.6rem;    /* hero headline */
+
+  /* ---- Weights ---- */
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+
+  /* ---- Line heights ---- */
+  --leading-tight:   1.12;
+  --leading-snug:    1.35;
+  --leading-normal:  1.65;
+  --leading-relaxed: 1.75;
+
+  /* ---- Tracking ---- */
+  --tracking-eyebrow: 0.12em;
+  --tracking-tight:  -0.02em;
+  --tracking-normal:  0;
+}

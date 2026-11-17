@@ -1,0 +1,10 @@
+/* kAIusap webfonts, self-hosted (DECIDED 2026-11-07, Mark).
+   IBM Plex Sans 1.1.0 and IBM Plex Mono 2.5.0 (@ibm/plex-*, "complete" woff2), SIL OFL 1.1 (see assets/fonts/OFL.txt).
+   URLs are relative to this file: consumers copy assets/fonts/ so it sits at ../assets/fonts/ from their tokens/ copy. */
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('../assets/fonts/IBMPlexSans-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: italic; font-weight: 400; font-display: swap; src: url('../assets/fonts/IBMPlexSans-Italic.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('../assets/fonts/IBMPlexSans-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('../assets/fonts/IBMPlexSans-SemiBold.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../assets/fonts/IBMPlexMono-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../assets/fonts/IBMPlexMono-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url('../assets/fonts/IBMPlexMono-SemiBold.woff2') format('woff2'); }

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kaiusap-map"
+dynamic = ["version"]
+description = "A browser map of your kaiusap sessions and the messages between them"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "web/vendor/LICENSE-d3", "web/assets/fonts/OFL.txt"]
+dependencies = []
+
+[project.scripts]
+kaiusap-map = "kaiusap_map.kaiusap_map:main"
+
+[tool.hatch.version]
+path = "server/kaiusap_map.py"
+
+# The repo keeps server/ and web/ side by side (web/ mirrors kaiusap-DS); the
+# wheel puts both in one kaiusap_map package, with web/ beside the server.
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
+[tool.hatch.build.targets.wheel.force-include]
+"server/__init__.py" = "kaiusap_map/__init__.py"
+"server/kaiusap_map.py" = "kaiusap_map/kaiusap_map.py"
+"server/focus.py" = "kaiusap_map/focus.py"
+"web" = "kaiusap_map/web"
+
+[tool.hatch.build.targets.sdist]
+include = ["server/", "web/", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]

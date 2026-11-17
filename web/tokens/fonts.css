@@ -1,0 +1,4 @@
+/* kAIusap webfonts — IBM Plex Sans (UI/body) + IBM Plex Mono (display, code).
+   CDN fallback only. styles.css now imports tokens/fonts-local.css (self-hosted,
+   decided 2026-11-07). Previously: delivered from Google Fonts as the strawman default. */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap');

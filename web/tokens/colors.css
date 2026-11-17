@@ -1,0 +1,102 @@
+/* ============================================================
+   kAIusap — Color tokens  (palette approved by Mark 2026-11-07)
+   Philippine-flag palette on paper. Flag blue: a message moved.
+   Sun gold: this needs you (fill, tint or border only, never text).
+   Flag red: danger only. Never pure white as the page canvas.
+   Opt into dark with class="dark" or [data-theme="dark"].
+   ============================================================ */
+:root {
+  /* ---- Base surfaces ---- */
+  --color-bg:              #f5f3ee;  /* paper — page canvas */
+  --color-surface:         #ffffff;  /* cards, terminal frames */
+  --color-surface-sunken:  #ece9e1;  /* code wells, insets */
+  --color-border:          #dcd7cc;  /* hairlines */
+  --color-border-strong:   #c4bdae;  /* inputs, stronger dividers */
+
+  /* ---- Primary — flag blue ---- */
+  --color-primary:         #0038a8;
+  --color-primary-light:   #dde6f7;  /* tints, decorative numerals */
+  --color-primary-dark:    #002c86;  /* hover / pressed */
+
+  /* ---- Secondary — sun gold ("needs you"). Never text: put ink on it. ---- */
+  --color-secondary:       #fcd116;
+  --color-secondary-light: #fdf3c4;
+  --color-secondary-dark:  #e0b800;  /* hover / border, not text */
+
+  /* ---- Semantic ---- */
+  --color-success:         #237a4f;
+  --color-success-light:   #e2f3ea;
+  --color-warn:            #fcd116;  /* same gold: fill or border, never text */
+  --color-warn-light:      #fdf3c4;
+  --color-danger:          #ce1126;
+  --color-danger-light:    #f9e1e3;
+  --color-info:            #0f6f7a;
+  --color-info-light:      #dff0f1;
+
+  /* ---- Text (ink ramp) ---- */
+  --color-text:            #17191c;  /* headings, primary copy */
+  --color-text-mid:        #4a4f57;  /* body, secondary labels */
+  --color-text-dim:        #8a8f97;  /* captions, timestamps */
+  --color-text-on-primary: #ffffff;
+  --color-text-on-secondary: #17191c;  /* ink on gold, both themes */
+
+  /* ---- Providers (session map, transcripts). No state meaning. ---- */
+  --color-provider-claude:  #b4552f;  /* clay */
+  --color-provider-codex:   #3b4250;  /* graphite */
+  --color-provider-opencode: #6e4a8e; /* plum */
+  --color-provider-opencode2: #3f2a5c; /* aubergine, OpenCode 2 */
+  --color-text-on-provider: #ffffff;
+
+  /* ---- Semantic aliases ---- */
+  --surface-page:  var(--color-bg);
+  --surface-card:  var(--color-surface);
+  --surface-code:  var(--color-surface-sunken);
+  --text-heading:  var(--color-text);
+  --text-body:     var(--color-text-mid);
+  --text-muted:    var(--color-text-dim);
+}
+
+/* Aliases must be re-declared here, or they compute once to the light value. */
+.dark, [data-theme="dark"] {
+  --color-bg:              #121416;
+  --color-surface:         #1b1e21;
+  --color-surface-sunken:  #0d0f10;
+  --color-border:          #2c3035;
+  --color-border-strong:   #40454c;
+
+  --color-primary:         #7aa2f7;
+  --color-primary-light:   #16233f;
+  --color-primary-dark:    #9dbbf9;
+
+  --color-secondary:       #fcd116;
+  --color-secondary-light: #3a3210;
+  --color-secondary-dark:  #ffe066;
+
+  --color-success:         #4cb57f;
+  --color-success-light:   #15301f;
+  --color-warn:            #fcd116;
+  --color-warn-light:      #3a3210;
+  --color-danger:          #f0596a;
+  --color-danger-light:    #3a1a1d;
+  --color-info:            #4fb3bf;
+  --color-info-light:      #112f33;
+
+  --color-text:            #e8e6e1;
+  --color-text-mid:        #a9adb3;
+  --color-text-dim:        #6f747b;
+  --color-text-on-primary: #0d0f10;
+  --color-text-on-secondary: #17191c;
+
+  --color-provider-claude:  #e08a63;
+  --color-provider-codex:   #a9b1c0;
+  --color-provider-opencode: #b79ad6;
+  --color-provider-opencode2: #e6d9f5; /* lavender */
+  --color-text-on-provider: #0d0f10;
+
+  --surface-page:  var(--color-bg);
+  --surface-card:  var(--color-surface);
+  --surface-code:  var(--color-surface-sunken);
+  --text-heading:  var(--color-text);
+  --text-body:     var(--color-text-mid);
+  --text-muted:    var(--color-text-dim);
+}

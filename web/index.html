@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kAIusap Session Map</title>
+<link rel="icon" type="image/svg+xml" href="assets/brand/kaiusap-icon.svg" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/svg+xml" href="assets/brand/kaiusap-icon-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="styles.css">
+<script>
+// kaiusap-DS opts into dark only by [data-theme="dark"]. Follow the OS unless the viewer picked Light or Dark
+// (kept in localStorage "theme"); runs before first paint so there is no flash.
+(() => {
+  const root = document.documentElement, mq = matchMedia("(prefers-color-scheme: dark)");
+  let choice = "system";
+  try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") choice = t; } catch (e) {}
+  const apply = () => { root.dataset.theme = choice === "system" ? (mq.matches ? "dark" : "light") : choice; };
+  mq.addEventListener("change", apply);
+  window.kaiusapTheme = {
+    get: () => choice,
+    set: c => {
+      choice = c; apply();
+      try { c === "system" ? localStorage.removeItem("theme") : localStorage.setItem("theme", c); } catch (e) {}
+    },
+  };
+  apply();
+})();
+</script>
+<style>
+/* Layout: one-screen instrument. Header strip, force canvas filling the rest, detail panel docked right (bottom sheet on phones).
+   Colours, type and spacing come from kaiusap-DS (web/tokens/, copied byte-identical; README "Design system"). */
+[data-theme="dark"] { color-scheme: dark; }
+html, body { height: 100%; }
+html { touch-action: manipulation; } /* no wait for a double-tap zoom, so a tap answers at once */
+body {
+  background: var(--color-bg); color: var(--color-text); font-family: var(--font-body);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+header {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--color-border); background: var(--color-surface);
+}
+/* The page title stays for screen readers only; the header shows no wordmark. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.example { font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--color-text-mid); background: var(--color-surface-sunken); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 2px 6px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+button, label.toggle {
+  font: 500 0.8rem var(--font-body); color: var(--color-text); background: transparent;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 6px 10px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+button:hover, label.toggle:hover { border-color: var(--color-primary); }
+button:focus-visible, label.toggle:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+button.primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-surface); }
+label.toggle input { accent-color: var(--color-primary); margin: 0; }
+/* View options: a burger opening a small panel under it, right-aligned. */
+.menu-wrap { position: relative; }
+button.icon { padding: 6px 7px; }
+.menu { position: absolute; z-index: 20; top: calc(100% + 4px); right: 0; min-width: 210px; padding: 10px 12px 12px;
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.menu[hidden] { display: none; }
+.menu .eyebrow { margin: 4px 0 0; }
+/* Theme switch: three equal icon segments across the menu. */
+#theme { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
+#theme button { justify-content: center; padding: 6px 0; }
+#theme button + button { border-left: 1px solid var(--color-border); }
+.menu .eyebrow:first-child { margin-top: 0; }
+/* Right-click on a session: one item, at the pointer, over everything. */
+.ctx { position: fixed; z-index: 40; min-width: 180px; max-width: 320px; padding: 4px;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.ctx[hidden] { display: none; }
+.ctx button { width: 100%; border: 0; border-radius: var(--radius-sm); padding: 6px 8px; gap: 8px; align-items: flex-start; text-align: left; }
+.ctx button > svg { flex: none; margin-top: 2px; color: var(--color-text-mid); }
+.ctx button:hover:not([aria-disabled="true"]), .ctx button:focus-visible { background: var(--color-primary-light); outline: none; }
+.ctx button:hover:not([aria-disabled="true"]) > svg { color: var(--color-primary); }
+.ctx button[aria-disabled="true"] { color: var(--color-text-mid); cursor: default; }
+.ctx-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ctx-text code, .ctx-text small { font: 400 0.7rem var(--font-mono); color: var(--color-text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-text small { font-family: var(--font-body); white-space: normal; }
+label.check { display: flex; align-items: center; gap: 8px; font-size: 0.83rem; cursor: pointer; padding: 2px 0; }
+label.check input { accent-color: var(--color-primary); margin: 0; }
+label.check:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 3px; }
+main { flex: 1; display: flex; min-height: 0; overflow: hidden; } /* the panel slides out past its edge */
+#stage { flex: 1; position: relative; min-width: 0; }
+svg#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+/* Zoom: a small bar at the canvas's bottom right; the level doubles as "reset to 100%". */
+.mapctl { position: absolute; right: 12px; bottom: 10px; display: flex; gap: 8px; }
+.zoombar { display: flex; background: var(--color-surface);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.zoombar button { border: 0; border-radius: 0; padding: 5px 8px; color: var(--color-text-mid); }
+.zoombar button:hover:not(:disabled) { color: var(--color-primary); background: var(--color-primary-light); }
+.zoombar button:disabled { color: var(--color-text-dim); cursor: default; opacity: 0.6; }
+.zoombar button + button { border-left: 1px solid var(--color-border); }
+.zoombar .z-level { font-family: var(--font-mono); font-size: 0.72rem; min-width: 5.2ch; justify-content: center; font-variant-numeric: tabular-nums; }
+.hint { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); right: 310px; bottom: 12px; /* wraps before the zoom bar */ font-size: var(--text-xs); color: var(--color-text-dim); opacity: 0.7; pointer-events: none; transition: color 0.15s, opacity 0.15s; }
+/* A quiet hint that darkens to --color-text-mid under the pointer. Only the words take the pointer, so a drag
+   starting beside them still reaches the map. */
+.hint span { pointer-events: auto; }
+.hint:hover { color: var(--color-text-mid); opacity: 1; }
+aside {
+  width: var(--panel-w, 340px); flex-shrink: 0; background: var(--color-surface);
+  overflow: hidden; padding: 18px; padding-right: max(18px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 16px; min-height: 0;
+}
+#resizer { flex-shrink: 0; width: 7px; cursor: col-resize; background: var(--color-surface); border-left: 1px solid var(--color-border); position: relative; touch-action: none; }
+/* An invisible hit area wider than the bar: into the map short of its controls, and into the panel's padding. */
+#resizer::before { content: ""; position: absolute; top: 0; bottom: 0; left: -6px; right: -12px; }
+#resizer::after { content: ""; position: absolute; left: 2px; top: 50%; width: 2px; height: 32px; margin-top: -16px; border-radius: 1px; background: var(--color-border); }
+#resizer:hover::after, #resizer.active::after, #resizer:focus-visible::after { background: var(--color-primary); }
+#resizer:focus-visible { outline: none; }
+#panel-toggle { position: absolute; top: 10px; left: -13px; z-index: 2; width: 26px; height: 26px; padding: 0; justify-content: center;
+  border-radius: 50%; background: var(--color-surface); color: var(--color-text-mid); font-size: 0.8rem; line-height: 1; }
+#panel-toggle:hover { color: var(--color-primary); }
+/* The chevron points the way the panel will move: right to hide it, left to bring it back. */
+#panel-toggle svg { transition: transform 0.22s var(--ease-out); }
+#panel-toggle.shut svg { transform: rotate(180deg); }
+main.collapsed aside { display: none; }
+main.collapsed #resizer { cursor: default; }
+main.collapsed #resizer::after { display: none; }
+.seg { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 3px 8px; font-size: 0.72rem; color: var(--color-text-mid); }
+.seg button[aria-pressed="true"] { background: var(--color-primary); color: var(--color-text-on-primary); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+aside h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; font-weight: 600; text-wrap: balance; overflow-wrap: anywhere; }
+/* A session's title leads with its circle and mark, as on the map. */
+aside h2.with-mark { display: flex; align-items: center; gap: 8px; }
+aside h2.with-mark .title-mark { flex: none; overflow: visible; }
+aside h2.with-mark > span { min-width: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--color-text-mid); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 0.83rem; }
+.kv dt { color: var(--color-text-mid); }
+.kv dd { margin: 0; font-family: var(--font-mono); font-size: 0.78rem; overflow-wrap: anywhere; min-width: 0; }
+/* The empty session card shown with nothing selected: its title and values in the dim text colour. */
+.template h2 > span, .kv.template dd, .kv.template dt { color: var(--color-text-dim); }
+.pill-row.template .pill { border-style: dashed; }
+/* Context in use: a thin neutral meter (not blue: it isn't mail or selection). */
+.kv .meter { display: block; height: 4px; margin: 5px 0 3px; background: var(--color-border); border-radius: 2px; overflow: hidden; }
+.kv .meter > span { display: block; height: 100%; background: var(--color-text-mid); }
+.kv .ctx-sub { display: block; color: var(--color-text-mid); font-size: var(--text-2xs); overflow-wrap: anywhere; }
+/* State labels: rectangles with --radius-sm (kaiusap-DS "SESSION MAP"). Gold only as a fill, with ink on it. */
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; padding: 1px 7px; border-radius: var(--radius-sm); border: 1px solid currentColor; }
+.pill.ok { color: var(--color-success); }
+.pill.primary { color: var(--color-primary); }
+.pill.need { color: var(--color-text-on-secondary); background: var(--color-secondary); border-color: var(--color-secondary-dark); }
+.pill.stored { color: var(--color-text-dim); }
+.pill.held { color: var(--color-text); background: var(--color-secondary-light); border-color: var(--color-secondary); } /* waits on the user: gold, never gold text */
+.pill.detached { color: var(--color-text-mid); border-style: dashed; }
+.list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--color-border); font-size: 0.82rem; }
+.list li:last-child { border-bottom: 0; }
+.list .pill.msg { width: 9ch; box-sizing: content-box; text-align: center; align-self: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+#panel .actions button:disabled { color: var(--color-text-dim); cursor: default; opacity: 0.6; }
+#panel .actions button.icon { color: var(--color-text-mid); }
+#panel .actions button.icon:hover:not(:disabled) { color: var(--color-primary); }
+.list .preview { grid-column: 1 / -1; font-size: var(--text-xs); color: var(--color-text-mid); white-space: pre-line; overflow-wrap: anywhere; line-height: 1.45; }
+.list .preview-from { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: var(--tracking-eyebrow); font-size: var(--text-2xs); color: var(--color-text-mid); }
+.list .sub { grid-column: 1 / -1; color: var(--color-text-mid); font-size: 0.74rem; font-family: var(--font-mono); }
+button.back { padding: 2px 8px 2px 6px; font-size: var(--text-xs); color: var(--color-text-mid); }
+h2 .peer { cursor: pointer; color: inherit; background: none; border: 0; padding: 0; font: inherit; text-decoration: underline; text-decoration-color: var(--color-border); text-underline-offset: 3px; }
+h2 .peer:hover { text-decoration-color: currentColor; }
+.list .peer { cursor: pointer; color: var(--color-primary); background: none; border: 0; padding: 0; font: inherit; text-align: left; }
+/* Session row actions (kaiusap-DS): one button at the row's right, spanning the name and status lines. */
+.list li:has(> .row-act) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.list li > .row-act { grid-column: 3; grid-row: 1 / span 2; align-self: center; border: 0; background: none; color: var(--color-text-mid); min-width: 24px; min-height: 24px; justify-content: center; }
+.list li > .row-act:hover:not([aria-disabled="true"]) { color: var(--color-primary); }
+.list li > .row-act[aria-disabled="true"] { color: var(--color-text-dim); opacity: 0.6; cursor: default; }
+.list li:has(> .row-act) > .sub { grid-column: 1 / 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A conversation opens in place: a caret like the legend's, and its threads indented under the row. */
+/* Every disclosure in the panel uses the same 14px chevron: its direction reads at a glance, where ▸ didn't. */
+:root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 2.75L9.25 7 5 11.25'/%3E%3C/svg%3E"); }
+.list .conv-toggle::before { content: ""; vertical-align: -2px; margin-right: 4px; display: inline-block; width: 14px; height: 14px; flex: none; background: currentColor; -webkit-mask: var(--chevron) center / 14px no-repeat; mask: var(--chevron) center / 14px no-repeat; transition: transform 0.15s; }
+.list .conv-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
+/* A disclosure inside a dock sits a level in: its chevron lines up with the dock's title, not the dock's chevron. */
+.list li.conv { padding-left: 20px; }
+.list li.conv > .sub { padding-left: 18px; } /* under the name, past its chevron */
+.list li.conv > .thread-list { margin-left: 18px; } /* the threads hang from the name too */
+.list .thread-list { grid-column: 1 / -1; margin: 6px 0 2px; padding-left: 10px; border-left: 1px solid var(--color-border); }
+.list .thread-list li:first-child { margin-top: 0; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.stat { position: relative; display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; }
+/* Two real buttons (kaiusap-DS "Summary card lists"): the body steps through the sessions, the chevron lists them. */
+.stat-step { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.stat-step { cursor: pointer; }
+.stat-toggle { position: absolute; top: 1px; right: 1px; display: flex; padding: 5px; border: 0; background: none; color: var(--color-text-mid); line-height: 0; }
+.stat-toggle svg { transition: transform 0.15s; }
+.stat-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.stat-toggle:hover:not(:disabled) { color: var(--color-primary); }
+.stat-toggle:disabled { color: var(--color-text-dim); opacity: 0.6; cursor: default; }
+.stat-list li.current { background: var(--color-bg); box-shadow: inset 2px 0 0 var(--color-primary); padding-left: 8px; }
+.stat b { display: block; font-family: var(--font-display); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.72rem; color: var(--color-text-mid); }
+/* Each card's border echoes its mark on the map: green ring, blue dashes, blue badge, dotted session. */
+/* 2px, with 1px less padding, so a lit card is the same size as a plain one. */
+.stat.lit { border-width: 2px; padding: 9px; }
+.stat.is-reach { border-color: var(--color-success); }
+.stat.is-owed { border-color: var(--color-primary); border-style: dashed; }
+.stat.is-unread { border-color: var(--color-primary); }
+.stat.is-unnamed { border-color: var(--color-text-dim); border-style: dotted; }
+/* Each card's tint, the light form of its colour: it fills the card whose list is open, and flashes on a tap. */
+.stat { --stat-tint: var(--color-surface-sunken); }
+.stat.is-reach { --stat-tint: var(--color-success-light); }
+.stat.is-unread, .stat.is-owed { --stat-tint: var(--color-primary-light); }
+.stat.listing { background: var(--stat-tint); }
+.legend { display: grid; grid-template-columns: 44px 1fr; justify-items: start; gap: 8px 10px; align-items: center; font-size: 0.8rem; }
+.legend svg { overflow: visible; }
+.legend svg[width="22"] { margin-left: 11px; } /* centred in the column the wide reply-owed swatch sets */
+.legend .lg-note { font-size: var(--text-xs); color: var(--color-text-mid); }
+/* The owed-reply swatch moves as the map does: the same dashes and pulse. */
+.lg-flow { animation: flow 0.9s linear infinite; }
+.lg-wring { transform-box: fill-box; transform-origin: center; animation: owe 1.8s var(--ease-out) infinite; }
+.lg-still { display: none; } /* the Key's reduced-motion form of Turn running: three still dots, no ring */
+p.note { font-size: 0.8rem; color: var(--color-text-mid); margin: 0; line-height: 1.5; }
+#panel { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; overflow-y: auto; }
+/* The title stays at the top of the panel while the rest scrolls under it. */
+#panel .panel-head { position: sticky; top: 0; z-index: 1; background: var(--color-surface); padding-bottom: var(--space-2); margin-bottom: calc(-1 * var(--space-2)); }
+/* A rule between blocks, except where two pieces belong together: the title and its status row,
+   the back link and the title, and a list's heading row and the list. */
+/* Rules, in three weights by level: 2px --color-border-strong between the panel's docks (the session panel,
+   This machine, the legend); 1px --color-border-strong between sections within a dock; 1px --color-border
+   between rows within a section. */
+#panel > * + *:not(.pill-row):not(.pill-row + .getback):not(.row + .list):not(.back-wrap + *) { border-top: 1px solid var(--color-border-strong); padding-top: var(--space-4); }
+#dock { flex-shrink: 0; border-top: 2px solid var(--color-border-strong); padding-top: 12px; }
+#dock summary { cursor: pointer; font-family: var(--font-mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--color-text-mid); list-style: none; display: flex; align-items: center; gap: 6px; }
+#dock summary::-webkit-details-marker { display: none; }
+#dock summary::before { content: ""; color: var(--color-text); display: inline-block; width: 14px; height: 14px; flex: none; background: currentColor; -webkit-mask: var(--chevron) center / 14px no-repeat; mask: var(--chevron) center / 14px no-repeat; transition: transform 0.15s; }
+#dock[open] summary::before { transform: rotate(90deg); }
+#dock.closing summary::before { transform: none; } /* turns as it starts to close */
+#dock summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+/* An open dock has a grab handle on its top rule, the side panel sizer's grip turned on its side. Dragging it,
+   or the dock's title row, sets how tall the dock's body is; past that it scrolls. A closed dock hides it with
+   the body, since it sits in the details' content. Double-click fits the body to its contents again. */
+#dock { position: relative; }
+.grip { position: absolute; left: 0; right: 0; top: -7px; height: 12px; cursor: row-resize; touch-action: none; z-index: 1; }
+.grip::after { content: ""; position: absolute; left: 50%; top: 4px; width: 32px; height: 4px; margin-left: -16px; border-radius: 2px; background: var(--color-text-dim); }
+.grip:hover::after, .grip.active::after, .grip:focus-visible::after { background: var(--color-primary); }
+.grip:focus-visible { outline: none; }
+.closing > .grip { display: none; }
+#dock-body.sized { overflow-y: auto; }
+/* The Key: a card over the map, anchored 8px above the control bars and right-aligned with them; on a phone, a
+   bottom sheet (kaiusap-DS "Key card"). Not a modal: the map stays usable while it's open. */
+#btn-key { font-family: var(--font-mono); font-size: 0.72rem; }
+#btn-key[aria-expanded="true"] { color: var(--color-primary); }
+#key { box-sizing: border-box; position: absolute; right: 0; bottom: calc(100% + var(--space-2)); z-index: 6; width: 300px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; padding: 10px 14px 14px; background: var(--color-surface);
+  border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+#key[hidden] { display: none; }
+#key .key-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; }
+#key h2 { margin: 0; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 400; text-transform: uppercase; letter-spacing: 0.09em; color: var(--color-text-mid); }
+#key .key-close { border: 0; background: none; color: var(--color-text-mid); margin-right: -7px; }
+#key .key-close:hover { color: var(--color-primary); }
+#key .grip { top: -7px; }
+#legend-body { margin-top: var(--space-2); overflow-y: auto; min-height: 0; flex: 0 1 auto; }
+#legend-body .legend + .legend { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border-strong); }
+/* The summary docked under a session's or a line's panel: it slides in from above when a selection opens. */
+#dock-body { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+#dock summary .host { text-transform: none; letter-spacing: normal; } /* the name as the machine spells it */
+#dock .dock-title { margin: 0; font-size: var(--text-sm); color: var(--color-text); }
+#dock .stat { padding: 6px 8px; }
+#dock .stat.lit { padding: 5px 7px; }
+#dock .stat b { font-size: var(--text-lg); }
+
+/* map marks */
+.hull { fill: var(--color-surface-sunken); stroke: var(--color-border); stroke-width: 1; }
+.hull-label { font-family: var(--font-mono); font-size: 11px; fill: var(--color-text-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.link { stroke: var(--color-text-dim); stroke-linecap: round; cursor: pointer; }
+.link.recent { stroke: var(--color-primary); } /* mail in the last 60 min */
+.link.selected { stroke: var(--color-primary); }
+.link-hit { stroke: transparent; stroke-width: 14; cursor: pointer; }
+/* Shift held: the canvas (and lines, which pan too) shows an open hand; dragging shows a closed one. Sessions keep theirs. */
+#stage.pan-ready #map, #stage.pan-ready .link, #stage.pan-ready .link-hit { cursor: grab; }
+#stage.panning #map, #stage.panning #map * { cursor: grabbing !important; }
+.flow, .flow-halo { stroke-dasharray: 2 9; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; animation: flow 0.9s linear infinite; }
+.flow { stroke: var(--color-primary); stroke-width: 2.5; }
+.flow-halo { stroke: var(--color-bg); stroke-width: 6; } /* canvas-coloured, so the dashes read on a blue line */
+@keyframes flow { to { stroke-dashoffset: -11; } }
+.node { cursor: grab; }
+.node:active { cursor: grabbing; }
+.node .body { stroke: var(--color-surface); stroke-width: 2; }
+.node .ring { fill: none; stroke-width: 2.5; }
+.node .ring.reachable { stroke: var(--color-success); stroke-width: 2.5; }
+.node .ring.detached { stroke: var(--color-text-mid); stroke-width: 2; stroke-dasharray: 3 3; }
+.node .ring.stored { stroke: var(--color-text-dim); stroke-width: 1.5; }
+.node.off .body { opacity: 0.38; }
+/* Turn running (kaiusap-DS): the ring that grows from r + 4 and fades, grey because working isn't mail. */
+.node .wring { fill: none; stroke: var(--color-text-mid); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: owe 1.8s var(--ease-out) infinite; pointer-events: none; }
+.flow-arrow { fill: var(--color-primary); pointer-events: none; }
+@keyframes owe { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.7); opacity: 0; } }
+.node .label { font-family: var(--font-mono); font-size: 11px; fill: var(--color-text); text-anchor: middle; paint-order: stroke; stroke: var(--color-bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.node .glyph { color: var(--color-text-on-provider); pointer-events: none; }
+.node .badge circle { stroke: var(--color-surface); stroke-width: 1.5; }
+.node .badge text { font-family: var(--font-mono); font-size: 9px; font-weight: 500; text-anchor: middle; dominant-baseline: central; }
+/* A selected session, picked one by one, with the box or from search, glows (below); there's no separate outline. */
+/* A clicked session shows no focus ring (the glow says it's selected); one reached with Tab keeps it. */
+.node:focus { outline: none; }
+html.kbd .node:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+/* Selected: a soft blue glow beneath the session (selection may be blue on the canvas). */
+.node .pick { fill: url(#pick-glow); stroke: none; pointer-events: none; }
+#pick-glow .glow-in { stop-color: var(--color-primary); stop-opacity: 0.6; } /* 3:1 against the canvas in both themes */
+#pick-glow .glow-out { stop-color: var(--color-primary); stop-opacity: 0; }
+.marquee { fill: var(--color-primary); fill-opacity: 0.08; stroke: var(--color-primary); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.node .pin { fill: var(--color-text); }
+/* Turn running under reduced motion: three still dots under the name (kaiusap-DS). */
+.node .dots circle { fill: var(--color-text-mid); opacity: 0.7; }
+.node.spawned .label { font-size: 9px; fill: var(--color-text-mid); }
+.packet { fill: var(--color-primary); pointer-events: none; }
+.dimmed { opacity: 0.18; transition: opacity 0.2s; }
+
+[hidden] { display: none !important; }
+.conn { font-family: var(--font-mono); font-size: 0.72rem; color: var(--color-text-mid); display: inline-flex; align-items: center; gap: 6px; }
+.conn::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--color-text-dim); }
+.conn.live::before { background: var(--color-success); }
+.conn.error::before { background: var(--color-danger); }
+.banner { padding: 8px max(16px, env(safe-area-inset-left, 0px)); font-size: 0.8rem; color: var(--color-danger);
+  background: var(--color-danger-light); border-bottom: 1px solid var(--color-danger); overflow-wrap: anywhere; }
+.node.unnamed .body { opacity: 0.55; stroke-dasharray: 1 2; }
+.node.unnamed .label { fill: var(--color-text-mid); }
+.node.released .body { fill: none; stroke: var(--color-text-dim); stroke-width: 1.5; stroke-dasharray: 2 3; opacity: 1; }
+/* Unfilled, so it would take a pointer only on its outline: the whole circle takes it, as a filled node's does. */
+.node.released .body { pointer-events: all; }
+.node.released .glyph { color: var(--color-text-dim); }
+.node.released .label { fill: var(--color-text-dim); }
+.list li.reply { padding-left: 14px; border-top: 0; }
+.list li.thread-start { margin-top: 4px; }
+.list li:has(+ li.reply) { border-bottom-style: dotted; }
+.cmd { display: flex; gap: 6px; align-items: stretch; } /* the copy button takes the command's height */
+.cmd code { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.74rem; overflow-wrap: anywhere;
+  background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 4px 6px; }
+.cmd button { padding: 3px 8px; font-size: 0.72rem; }
+.cmd button.icon { flex: none; padding: 0 7px; justify-content: center; border-radius: var(--radius-sm); }
+/* Status pill with the show-terminal button beside it, then its short result. */
+.pill-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pill-row button.icon { flex: none; padding: 2px 5px; }
+.focus-msg { font-size: var(--text-xs); color: var(--color-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.focus-msg.bad { color: var(--color-danger); }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--color-text-mid); font-size: 0.9rem; pointer-events: none; padding: 16px; text-align: center; }
+/* Search: same border, radius and focus ring as the header buttons. */
+.search { position: relative; flex: 0 1 260px; min-width: 160px; }
+.search input { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.83rem; color: var(--color-text);
+  background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 5px 9px; }
+.search input::placeholder { color: var(--color-text-dim); }
+.search input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.search-results { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px 0; list-style: none;
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); max-height: 60vh; overflow-y: auto;
+  box-shadow: var(--shadow-lg); }
+.search-results li { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 5px 10px; cursor: pointer; }
+.search-results li[aria-selected="true"] { background: var(--color-bg); box-shadow: inset 2px 0 0 var(--color-primary); }
+.search-results .name { font-size: 0.83rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-results .name mark { background: none; color: var(--color-text); font-weight: 600; }
+.search-results .kind { font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-text-mid); text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
+.search-results .sub { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 0.7rem; color: var(--color-text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-results .none { cursor: default; color: var(--color-text-mid); font-size: 0.83rem; }
+@media (max-width: 760px) {
+  main { flex-direction: column; }
+  .search { flex: 1 1 160px; }
+  aside { width: auto; height: var(--panel-h, 42%);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hint { display: none; }
+  #resizer { width: auto; height: 9px; cursor: row-resize; border-left: 0; border-top: 1px solid var(--color-border); }
+  #resizer::before { left: 0; right: 0; top: -8px; bottom: -14px; }
+  #resizer::after { left: 50%; top: 3px; width: 32px; height: 2px; margin: 0 0 0 -16px; }
+  #panel-toggle { top: -13px; left: auto; right: max(16px, env(safe-area-inset-right, 0px)); }
+  #panel-toggle svg { transform: rotate(90deg); } /* down to hide it, up to bring it back */
+  #panel-toggle.shut svg { transform: rotate(-90deg); }
+  #key { position: fixed; left: 0; right: 0; bottom: 0; width: auto; max-width: none; z-index: 30;
+    border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px)); }
+  /* Phone sheets (kaiusap-DS "Key card"): a sheet you hide and bring back (the side panel) has the
+     top-edge chevron; a sheet you dismiss (the Key) has the ×, its only control besides Esc. No grab bar, no drag;
+     its height is its contents, up to half the screen. */
+  #key .grip { display: none; }
+  #legend-body { max-height: none !important; }
+  #key .key-head { min-height: var(--target-min); }
+}
+/* Touch targets (kaiusap-DS VISUAL FOUNDATIONS → Touch targets): on a touch screen every control is at least
+   --target-min square, made visibly larger with padding and min sizes. Only a control standing alone with
+   space around it may keep its look and extend an invisible hit area. Mouse and trackpad sizes don't change. */
+@media (pointer: coarse) {
+  button, label.toggle { min-height: var(--target-min); min-width: var(--target-min); justify-content: center; }
+  label.check { min-height: var(--target-min); }
+  .search input { min-height: var(--target-min); }
+  .search-results li { min-height: var(--target-min); align-content: center; }
+  /* Session names in lists and titles: full-height rows, left-aligned as before. */
+  .peer { min-width: 0; justify-content: flex-start; }
+  .list li:has(> .peer) { padding: 0; align-items: center; }
+  /* The card grows a visible 44px strip along its bottom for its chevron, set off by a rule, rather than an
+     invisible hit area, which would overlap the card's body (kaiusap-DS "Summary card lists"). */
+  .stat-step { justify-content: flex-start; align-items: flex-start; }
+  .stat-toggle { position: static; justify-content: center; align-items: center; width: 100%; margin-top: 6px; padding: 0; border-top: 1px solid var(--color-border); border-radius: 0; }
+  #dock summary { min-height: var(--target-min); }
+  #dock { padding-top: 0; }
+  #key .key-head { min-height: var(--target-min); touch-action: none; } /* the Key card's drag target */
+  #key { padding-top: 0; }
+  /* The title row is the 44px drag target on a touch screen; the grip only shows where it is. */
+  .grip { pointer-events: none; }
+  #dock summary { touch-action: none; } /* the drag isn't taken for a scroll */
+  /* The two control bars no longer fit side by side on a phone: the zoom bar wraps above the pin bar.
+     The row spans the canvas, so only the bars themselves take taps. */
+  .mapctl { left: 12px; flex-wrap: wrap-reverse; justify-content: flex-end; pointer-events: none; }
+  .mapctl > * { pointer-events: auto; }
+  .zoombar .z-level { min-width: var(--target-min); }
+  /* The panel toggle stands alone on the sizer: it keeps its 26px circle and reaches --target-min invisibly
+     (the hit area is placed from inside its 1px border, so 24px across). */
+  #panel-toggle { min-width: 0; min-height: 0; }
+  #panel-toggle::before { content: ""; position: absolute; inset: calc((24px - var(--target-min)) / 2); border-radius: 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow, .flow-halo { animation: none; }
+  .lg-flow { animation: none; }
+  .lg-wring { display: none; }
+  .lg-still { display: inline; }
+  #panel-toggle svg, .stat-toggle svg, .list .conv-toggle::before, #dock summary::before { transition: none; }
+}
+</style>
+
+<header>
+  <h1 class="sr-only">kAIusap session map</h1>
+  <span class="example" hidden>Example data</span>
+  <span id="conn" class="conn" role="status" tabindex="0">connecting…</span>
+  <div class="search" id="search">
+    <input id="q" type="search" placeholder="Find a session or repo  /" autocomplete="off" spellcheck="false"
+      role="combobox" aria-label="Find a session or repository" aria-expanded="false" aria-controls="q-results" aria-autocomplete="list">
+    <ul id="q-results" class="search-results" role="listbox" aria-label="Matches" hidden></ul>
+  </div>
+  <div class="controls">
+    <button id="btn-mail" class="primary demo-only" type="button" hidden>Send example message</button>
+    <div class="menu-wrap">
+      <button id="btn-menu" class="icon" type="button" aria-expanded="false" aria-controls="menu" aria-label="View options" title="View options">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <div class="menu" id="menu" hidden>
+        <p class="eyebrow">Show</p>
+        <label class="check"><input type="checkbox" id="opt-unnamed" checked> Unnamed sessions</label>
+        <label class="check"><input type="checkbox" id="opt-past" checked> Past conversations</label>
+        <label class="check demo-only" hidden><input type="checkbox" id="opt-spawned" checked> Spawned agents</label>
+        <p class="eyebrow">Theme</p>
+        <div class="seg" id="theme" role="group" aria-label="Theme">
+          <button type="button" data-theme-choice="system" aria-label="System" title="System: follow the OS">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="1.75" y="2.5" width="12.5" height="8.5" rx="1.2"/><path d="M5.5 13.75h5M8 11v2.75" stroke-linecap="round"/></svg>
+          </button><button type="button" data-theme-choice="light" aria-label="Light" title="Light">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" stroke-linejoin="round" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="2.9"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>
+          </button><button type="button" data-theme-choice="dark" aria-label="Dark" title="Dark">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" stroke-linecap="round" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M13.2 10.1A5.6 5.6 0 0 1 5.9 2.8a5.6 5.6 0 1 0 7.3 7.3z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<div id="banner" class="banner" role="alert" hidden></div>
+<main>
+  <div id="stage">
+    <svg id="map" aria-label="Map of sessions and their conversations"></svg>
+    <div class="mapctl">
+    <div class="zoombar" role="group" aria-label="Pins and layout">
+      <button type="button" id="btn-pin" aria-label="Pin" title="Pin">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1.75h4M5.6 1.75v3.4L3.6 7.6h6.8L8.4 5.15v-3.4M7 7.6v4.65"/></svg></button>
+      <button type="button" id="btn-unpin" aria-label="Unpin" title="Unpin">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 1.75h4M5.6 1.75v3.4L3.6 7.6h6.8L8.4 5.15v-3.4M7 7.6v4.65"/><path d="M1.75 1.75l10.5 10.5"/></svg></button>
+      <button type="button" id="btn-tidy" aria-label="Tidy the layout" title="Tidy: re-run the layout so unpinned sessions settle (T)">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M11.6 5.4A4.9 4.9 0 0 0 2.6 4.6M2.4 8.6a4.9 4.9 0 0 0 9 .8"/><path d="M2.4 1.9v2.9h2.9M11.6 12.1V9.2H8.7"/></svg></button>
+    </div>
+    <div class="zoombar" role="group" aria-label="Zoom">
+      <button type="button" id="z-out" aria-label="Zoom out" title="Zoom out (−)">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button type="button" id="z-reset" class="z-level" aria-label="Zoom level; reset to 100%" title="Reset to 100% (Shift+0)"><span id="z-pct">100%</span></button>
+      <button type="button" id="z-in" aria-label="Zoom in" title="Zoom in (+)">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8M7 3v8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button type="button" id="z-centre" aria-label="Centre the selection" title="Centre the selection (Shift+2)" disabled>
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="3.75"/><path d="M7 1.25v2M7 10.75v2M1.25 7h2M10.75 7h2"/><circle cx="7" cy="7" r="1.25" fill="currentColor" stroke="none"/></svg></button>
+      <button type="button" id="z-fit" aria-label="Fit all sessions in view" title="Fit all sessions in view (Shift+1)">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1.75 5V1.75H5M9 1.75h3.25V5M12.25 9v3.25H9M5 12.25H1.75V9"/></svg></button>
+      <button type="button" id="btn-key" aria-expanded="false" aria-controls="key" title="Show the Key">Key</button>
+    </div>
+    <section id="key" role="region" aria-labelledby="key-title" hidden>
+      <div class="grip" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Resize the Key" title="Drag to resize; double-click to fit"></div>
+      <div class="key-head"><h2 id="key-title">Key</h2>
+        <button type="button" class="icon key-close" aria-label="Close the Key (Esc)" title="Close the Key (Esc)"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 3.75l6.5 6.5M10.25 3.75l-6.5 6.5"/></svg></button></div>
+      <div id="legend-body"></div>
+    </section>
+    </div>
+    <div class="hint"><span>Click or drag a box to select. Dropped items stay pinned; double-click releases. Shift+drag to move map.</span></div>
+    <div id="empty" class="empty" hidden></div>
+  </div>
+  <div id="resizer" role="separator" tabindex="0" aria-label="Resize the side panel"><button id="panel-toggle" type="button" aria-expanded="true" aria-label="Hide the side panel" title="Hide the side panel"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2.75L9.25 7 5 11.25"/></svg></button></div>
+  <aside>
+    <div id="panel" aria-live="polite"></div>
+    <details id="dock" open>
+      <div class="grip" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Resize This machine" title="Drag to resize; double-click to fit"></div>
+      <summary>This machine</summary>
+      <div id="dock-body"></div>
+    </details>
+  </aside>
+</main>
+<div class="ctx" id="ctx" role="menu" hidden></div>
+<div class="sr-only" id="ctx-status" role="status" aria-live="polite"></div>
+
+<script src="vendor/d3.min.js"></script>
+<script src="demo.js"></script>
+<script src="map.js"></script>

@@ -1,0 +1,10 @@
+kAIusap session map (kaiusap-map)
+Copyright 2026 Mark Emila
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes:
+- d3 7.8.5, Copyright 2010-2023 Mike Bostock, under the ISC licence
+  (web/vendor/LICENSE-d3).
+- IBM Plex fonts, Copyright IBM Corp., under the SIL Open Font License 1.1
+  (web/assets/fonts/OFL.txt).
