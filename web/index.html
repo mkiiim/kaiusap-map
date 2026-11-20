@@ -274,9 +274,11 @@ p.note { font-size: 0.8rem; color: var(--color-text-mid); margin: 0; line-height
 /* Shift held: the canvas (and lines, which pan too) shows an open hand; dragging shows a closed one. Sessions keep theirs. */
 #stage.pan-ready #map, #stage.pan-ready .link, #stage.pan-ready .link-hit { cursor: grab; }
 #stage.panning #map, #stage.panning #map * { cursor: grabbing !important; }
-.flow, .flow-halo { stroke-dasharray: 2 9; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; animation: flow 0.9s linear infinite; }
-.flow { stroke: var(--color-primary); stroke-width: 2.5; }
-.flow-halo { stroke: var(--color-bg); stroke-width: 6; } /* canvas-coloured, so the dashes read on a blue line */
+/* 4px dashes every 11px, the size the reply's dashes start at, so the hook reads as one stroke. */
+.flow { stroke-dasharray: 4 7; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; animation: flow 0.9s linear infinite; }
+.flow { stroke: var(--color-primary); stroke-width: 2.5; opacity: 0.9; }
+/* The reply still owed: dashes that slow, shrink to dots and fade near the arrowhead, so it reads as expected rather than sent. */
+.flow-dots { stroke: var(--color-primary); stroke-width: 2.5; stroke-linecap: round; pointer-events: none; }
 @keyframes flow { to { stroke-dashoffset: -11; } }
 .node { cursor: grab; }
 .node:active { cursor: grabbing; }
@@ -288,7 +290,7 @@ p.note { font-size: 0.8rem; color: var(--color-text-mid); margin: 0; line-height
 .node.off .body { opacity: 0.38; }
 /* Turn running (kaiusap-DS): the ring that grows from r + 4 and fades, grey because working isn't mail. */
 .node .wring { fill: none; stroke: var(--color-text-mid); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: owe 1.8s var(--ease-out) infinite; pointer-events: none; }
-.flow-arrow { fill: var(--color-primary); pointer-events: none; }
+.flow-arrow { fill: var(--color-bg); stroke: var(--color-primary); stroke-width: 1.5; stroke-linejoin: round; opacity: 0.5; pointer-events: none; }
 @keyframes owe { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.7); opacity: 0; } }
 .node .label { font-family: var(--font-mono); font-size: 11px; fill: var(--color-text); text-anchor: middle; paint-order: stroke; stroke: var(--color-bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 .node .glyph { color: var(--color-text-on-provider); pointer-events: none; }
@@ -411,9 +413,10 @@ svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: n
   #panel-toggle::before { content: ""; position: absolute; inset: calc((24px - var(--target-min)) / 2); border-radius: 50%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .flow, .flow-halo { animation: none; }
+  .flow { animation: none; }
   .lg-flow { animation: none; }
   .lg-wring { display: none; }
+  .lg-flow-dots { display: none; }
   .lg-still { display: inline; }
   #panel-toggle svg, .stat-toggle svg, .list .conv-toggle::before, #dock summary::before { transition: none; }
 }

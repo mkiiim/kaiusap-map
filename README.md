@@ -15,7 +15,7 @@ The kAIusap map shows, in a browser, your kAIusap sessions:
 
 Each session is a circle, and the messages between two sessions are a line between them. From the map, you can get back to any session in a click: its terminal, or the Claude desktop app it runs in.
 
-I built the map because I found that once more than a few sessions were talking to each other or working on coordinated tasks, it became hard to keep track of who was doing what. I also work across tmux and several terminal windows (most often Ghostty), each split into panes, so finding the right session meant tabbing through a sea of windows. I wanted one place to see them all and bring the one I needed to the front. The map does both.
+I built the map because I found that once more than a few sessions were talking to each other or working on coordinated tasks, it became hard to keep track of who was doing what. I also work across tmux and several terminal windows (most often Ghostty), each split into panes, so finding the right session meant tabbing through a sea of windows. I wanted one place to see them and their relationships, and to be able to bring the one I needed to the front. The map does this.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/map-flow-dark.gif">
