@@ -402,7 +402,7 @@ svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: n
   /* The title row is the 44px drag target on a touch screen; the grip only shows where it is. */
   .grip { pointer-events: none; }
   #dock summary { touch-action: none; } /* the drag isn't taken for a scroll */
-  /* The two control bars no longer fit side by side on a phone: the zoom bar wraps above the pin bar.
+  /* If the two control bars don't fit side by side, the zoom bar wraps above the pin bar.
      The row spans the canvas, so only the bars themselves take taps. */
   .mapctl { left: 12px; flex-wrap: wrap-reverse; justify-content: flex-end; pointer-events: none; }
   .mapctl > * { pointer-events: auto; }
@@ -411,6 +411,15 @@ svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: n
      (the hit area is placed from inside its 1px border, so 24px across). */
   #panel-toggle { min-width: 0; min-height: 0; }
   #panel-toggle::before { content: ""; position: absolute; inset: calc((24px - var(--target-min)) / 2); border-radius: 50%; }
+}
+/* On a phone, nine 44px controls don't fit on one row. Pinch zooms, so Zoom out and Zoom in go.
+   The level stays as the readout and still resets the zoom when tapped, and it loses the divider the
+   hidden button left before it. The remaining seven fit on one row at 375px. The row sits higher so the
+   panel toggle's hit area, which rises 22px above the sizer, doesn't take taps meant for Key. */
+@media (pointer: coarse) and (max-width: 760px) {
+  #z-out, #z-in { display: none; }
+  .zoombar #z-reset { border-left: 0; }
+  .mapctl { bottom: 26px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .flow { animation: none; }
