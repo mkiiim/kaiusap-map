@@ -133,7 +133,8 @@ OSA_TIMEOUT = 10
 
 
 def osa(script, *args):
-    """Run an AppleScript with argv items. Returns its output ("ok", "none", a listing) or "denied"."""
+    """Run an AppleScript with argv items. Returns its output ("ok", "none", a listing), "denied", or
+    "error: " and what macOS said."""
     p = subprocess.run(["osascript", "-e", script, *args], capture_output=True,
                        text=True, timeout=OSA_TIMEOUT)
     if p.returncode != 0:
@@ -241,11 +242,14 @@ class TerminalMac(MacBackend):
     label, process = "Terminal", "Terminal"
 
     def focus_tmux(self, tmux):
+        failed = None
         for tty in tmux.client_ttys:
             r = osa(TERMINAL_FOCUS, tty)
             if r in ("ok", "denied"):
                 return r
-        return "none"
+            if r.startswith("error:"):
+                failed = failed or r
+        return failed or "none"
 
 
 # A session's host, from kaiusap's `hosts`: apps, editors or pages, preferred first. The map
@@ -321,6 +325,12 @@ def denied(backends):
     return False, "Needs permission", f"{backends[0].os_name} didn't allow the map server to control {apps}. {backends[0].permission_help}"
 
 
+def failed(b, r):
+    """An AppleScript that failed for a reason other than permission: say so, with macOS's words, rather than
+    report no window, since the window may well be there."""
+    return False, f"{b.label} didn't answer", f"macOS couldn't ask {b.label} for its windows: {r[6:].strip()}"
+
+
 def focus_terminal(node, backends=None):
     """Bring the node's terminal to the front. Returns (ok, short, message): a
     few words for under the button and the full sentence for its tooltip."""
@@ -333,7 +343,7 @@ def focus_terminal(node, backends=None):
     names = attached_tmux_sessions(node)
     if not names:
         return focus_outside_tmux(node, backends)
-    refused = []
+    refused, errors = [], []
     for name in names:
         tmux = TmuxSession(name)
         for b in backends:
@@ -343,8 +353,12 @@ def focus_terminal(node, backends=None):
                     return True, f"Shown in {b.label}", f"Brought {b.label}'s {name} to the front."
                 if r == "denied":
                     refused.append(b)
+                elif r.startswith("error:"):
+                    errors.append((b, r))
     if refused:
         return denied(refused)
+    if errors:
+        return failed(*errors[0])
     apps = " or ".join(b.label for b in backends if not b.opens)
     return False, "No window found", f"No {apps} window shows tmux session {names[0]}."
 
@@ -380,6 +394,7 @@ def focus_outside_tmux(node, backends):
     if not running:
         return False, "No window found", (f"Outside tmux the map can only find a session in {apps}, by its title, "
                                           f"and {apps} isn't running.")
+    errors = []
     for b in running:
         r = b.focus_titled(node)
         if r == "ok":
@@ -388,6 +403,10 @@ def focus_outside_tmux(node, backends):
             return denied([b])
         if r == "several":
             return False, "Several windows", f"More than one {b.label} split is titled {label}, so the map won't guess which."
+        if r.startswith("error:"):
+            errors.append((b, r))
+    if errors:
+        return failed(*errors[0])
     hint = (" Codex shows its name in the title only with thread-name (default) or thread-id in [tui] terminal_title."
             if node.get("provider") == "codex" else "")
     return False, "No window found", (f"No {apps} split is titled with {label}. Outside tmux the map finds a session only "
