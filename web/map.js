@@ -74,9 +74,9 @@ glow.append("stop").attr("offset", "100%").attr("class", "glow-out");
 const root = svg.append("g");
 const gHull = root.append("g");
 const gLink = root.append("g");
-const gFlow = root.append("g");
 const gPacket = root.append("g");
 const gNode = root.append("g");
+const gFlow = root.append("g"); // owed-reply hooks, above the sessions so a neighbour never hides one (no pointer events)
 const gMarquee = root.append("g"); // the selection box, above everything
 let W = 800, H = 600;
 // Panning the canvas needs Shift with a mouse drag (touch drags still pan); the wheel and pinch zoom.
@@ -186,13 +186,14 @@ function render(alpha = 0.8) {
   hitSel = gLink.selectAll("line.link-hit").data(vLinks.filter(l => !l.lineage), l => key(l)).join("line").attr("class", "link-hit")
     .on("click", (e, l) => { e.stopPropagation(); select({ type: "link", d: l }); });
   // Owes a reply (kaiusap-DS): one hook per owing end of a line. Blue dashes run from the asker toward the
-  // session that owes, turn just past its ring, and come back beside the line, ending in an arrowhead at the asker.
-  // Each hook is a canvas-coloured halo under the dashes, so they stand clear of the line beneath, and the arrow.
+  // session that owes and turn just past its ring; the reply still owed arcs back toward the asker as dashes that
+  // slow, shrink to dots and fade as they near an outlined arrowhead (animateOwed): expected, not yet sent.
+  // Each hook is the sending dashes, the reply's dashes and the arrow, drawn above the sessions with no halo.
   const hooks = vLinks.flatMap(l => [...(l.owers || (l.open ? [l.open] : []))].map(o => ({ l, o })));
   flowSel = gFlow.selectAll("g.flow-pair").data(hooks, h => key(h.l) + "@" + h.o).join(e => {
     const g = e.append("g").attr("class", "flow-pair");
-    g.append("path").attr("class", "flow-halo");
     g.append("path").attr("class", "flow");
+    g.append("g").attr("class", "flow-dots");
     g.append("polygon").attr("class", "flow-arrow");
     return g;
   });
@@ -319,6 +320,7 @@ function ticked() {
   // select (not selectAll) passes each pair's current link down to its lines.
   flowSel.each(function (h) {
     const b = byId.get(h.o), a = other(h.l, h.o), k = hook(a, b), g = d3.select(this).attr("display", k ? null : "none");
+    h.k = k;
     if (!k) return;
     g.selectAll("path").attr("d", k.d);
     g.select("polygon").attr("points", k.arrow);
@@ -327,10 +329,11 @@ function ticked() {
 }
 // The hook's geometry (kaiusap-DS "Owes a reply", with the legs moved off the line): the sending leg runs
 // `side` px to one side of the line, from just outside the asker's ring to 10px past the owing node's ring; a turn
-// of that radius brings it to the same distance on the other side, and the reply leg runs back toward the asker for a
-// quarter of the line (18 to 80px), angled `splay` degrees out from the line, ending in an arrowhead 12px long and
-// 8px wide. None when the two rings nearly touch.
-const HOOK = { side: 5, splay: 8, turn: 10, min: 18, max: 80, arrow: 12, half: 4 };
+// of that radius brings it to the same distance on the other side, and the reply leg arcs back toward the asker. The
+// arc runs from the turn to just outside the asker's ring, bowing outward (away from the sending leg) by a twelfth
+// of that run (3 to 14px), but only its first `back` share by length is drawn: the arrowhead's tip ends there, still on
+// the arc, heading for the asker. The arrowhead is 12px long and 8px wide. None when the two rings nearly touch.
+const HOOK = { side: 5, turn: 10, back: 0.8, bow: 1 / 12, bowMin: 3, bowMax: 14, arrow: 12, half: 4 };
 function hook(a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
   const ra = a.r + 4 + 6, rb = b.r + 4 + HOOK.turn;
@@ -338,16 +341,55 @@ function hook(a, b) {
   const u = [dx / len, dy / len], n = [-u[1], u[0]], f = v => v.toFixed(1);
   const g = HOOK.side, S = [a.x + u[0] * ra - n[0] * g, a.y + u[1] * ra - n[1] * g];
   const P = [b.x - u[0] * rb - n[0] * g, b.y - u[1] * rb - n[1] * g], P2 = [P[0] + n[0] * 2 * g, P[1] + n[1] * 2 * g];
-  const L = Math.min(Math.max(HOOK.min, Math.min(HOOK.max, len / 4)), len - ra - rb);
-  // The reply leg's direction: back along the line, turned outward (away from the sending leg).
-  const t = HOOK.splay * Math.PI / 180, v = [-u[0] * Math.cos(t) + n[0] * Math.sin(t), -u[1] * Math.cos(t) + n[1] * Math.sin(t)], m = [-v[1], v[0]];
-  const Q = [P2[0] + v[0] * L, P2[1] + v[1] * L], T = [Q[0] + v[0] * HOOK.arrow, Q[1] + v[1] * HOOK.arrow];
+  // The whole arc: a quadratic curve from P2 to F, beside the line at the asker's ring, whose control point C sits
+  // outward of the midpoint by twice the bow, so the curve's peak is the bow.
+  const F = [a.x + u[0] * ra + n[0] * g, a.y + u[1] * ra + n[1] * g], run = len - ra - rb;
+  const h = Math.min(HOOK.bowMax, Math.max(HOOK.bowMin, run * HOOK.bow));
+  const C = [(P2[0] + F[0]) / 2 + n[0] * 2 * h, (P2[1] + F[1]) / 2 + n[1] * 2 * h];
+  const at = t => [0, 1].map(i => (1 - t) ** 2 * P2[i] + 2 * (1 - t) * t * C[i] + t * t * F[i]);
+  // Walk the arc to find where the drawn part ends: the arrowhead's base E sits an arrow's length before the tip,
+  // which is `back` of the arc's length from P2.
+  const N = 48, pts = d3.range(N + 1).map(i => at(i / N)), acc = [0];
+  for (let i = 1; i <= N; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const tAt = s => { const i = Math.max(1, d3.bisectLeft(acc, s)), k = (s - acc[i - 1]) / ((acc[i] - acc[i - 1]) || 1); return (i - 1 + Math.min(1, k)) / N; };
+  const tip = acc[N] * HOOK.back, te = tAt(Math.max(0, tip - HOOK.arrow)), E = at(te), T = at(tAt(tip));
+  // The drawn part, P2 to E, as its own quadratic (de Casteljau split at te).
+  const C1 = [P2[0] + (C[0] - P2[0]) * te, P2[1] + (C[1] - P2[1]) * te];
+  // The drawn part measured by length, for the dots that travel it.
+  const q = t => [0, 1].map(i => (1 - t) ** 2 * P2[i] + 2 * (1 - t) * t * C1[i] + t * t * E[i]);
+  const qs = d3.range(33).map(i => q(i / 32)), qa = [0];
+  for (let i = 1; i <= 32; i++) qa.push(qa[i - 1] + Math.hypot(qs[i][0] - qs[i - 1][0], qs[i][1] - qs[i - 1][1]));
+  const backAt = s => { const i = Math.min(32, Math.max(1, d3.bisectLeft(qa, s))), w = (s - qa[i - 1]) / ((qa[i] - qa[i - 1]) || 1); return [qs[i - 1][0] + (qs[i][0] - qs[i - 1][0]) * w, qs[i - 1][1] + (qs[i][1] - qs[i - 1][1]) * w]; };
+  const el = Math.hypot(T[0] - E[0], T[1] - E[1]) || 1, v = [(T[0] - E[0]) / el, (T[1] - E[1]) / el], m = [-v[1], v[0]];
   return {
-    d: `M${f(S[0])} ${f(S[1])}L${f(P[0])} ${f(P[1])}A${g} ${g} 0 0 1 ${f(P2[0])} ${f(P2[1])}L${f(Q[0])} ${f(Q[1])}`,
-    arrow: `${f(T[0])},${f(T[1])} ${f(Q[0] + m[0] * HOOK.half)},${f(Q[1] + m[1] * HOOK.half)} ${f(Q[0] - m[0] * HOOK.half)},${f(Q[1] - m[1] * HOOK.half)}`,
+    d: `M${f(S[0])} ${f(S[1])}L${f(P[0])} ${f(P[1])}A${g} ${g} 0 0 1 ${f(P2[0])} ${f(P2[1])}`,
+    backLen: qa[32], backAt,
+    arrow: `${f(T[0])},${f(T[1])} ${f(E[0] + m[0] * HOOK.half)},${f(E[1] + m[1] * HOOK.half)} ${f(E[0] - m[0] * HOOK.half)},${f(E[1] - m[1] * HOOK.half)}`,
   };
 }
 function other(l, id) { return l.source.id === id ? l.target : l.source; }
+// The reply still owed: dashes leave the turn at the sending dashes' speed (12px/s, 11px apart) and ease out along
+// the arc, slowing, shrinking to dots and fading to nothing at the arrowhead. Under reduced motion they hold still,
+// shrinking and fading the same way.
+const OWED_DOTS = { gap: 11, speed: 12.2, dash: 4 };
+function animateOwed(now) {
+  flowSel?.each(function (h) {
+    const k = h.k;
+    if (!k) return;
+    const L = k.backLen, n = Math.max(2, Math.round(2 * L / OWED_DOTS.gap)), period = 2 * L / OWED_DOTS.speed * 1000;
+    const base = stillMotion.matches ? 0 : now / period;
+    d3.select(this).select(".flow-dots").selectAll("line").data(d3.range(n)).join("line")
+      .each(function (i) {
+        const p = (base + i / n) % 1, s = L * (1 - (1 - p) ** 2), half = OWED_DOTS.dash * (1 - p) / 2;
+        const p0 = k.backAt(Math.max(0, s - half)), p1 = k.backAt(Math.min(L, s + half));
+        this.setAttribute("x1", p0[0].toFixed(1)); this.setAttribute("y1", p0[1].toFixed(1));
+        this.setAttribute("x2", p1[0].toFixed(1)); this.setAttribute("y2", p1[1].toFixed(1));
+        this.setAttribute("opacity", (0.9 * (1 - p)).toFixed(2));
+      });
+  });
+  requestAnimationFrame(animateOwed);
+}
+requestAnimationFrame(animateOwed);
 
 // Dragging a picked session moves every picked session, keeping their spacing; each is pinned where it lands.
 function togglePick(d) { const p = basePick(); p.has(d) ? p.delete(d) : p.add(d); setPicked(p); }
@@ -842,9 +884,10 @@ const SWATCH = {
   reach: () => `<circle r="9" fill="none" stroke="${css("--color-success")}" stroke-width="2.5"/>`,
   unread: (n = "") => `<circle r="7.5" fill="${css("--color-primary")}"/><text x="0" y="3.5" font-size="9" fill="${css("--color-text-on-primary")}" text-anchor="middle">${n}</text>`,
   // Twice as wide as the other swatches, with fine dashes, so the hook reads at Key size: dashes run from the asker
-  // (the arrowhead) to the session that owes, turn just past it, and come back to the arrowhead. A 1.5 + 4 dash
-  // repeats every 5.5, so the flow's -11 offset loops cleanly.
-  owed: () => `<path class="lg-flow" d="M-20 -2.5L12 -2.5A2.5 2.5 0 0 1 12 2.5L-10 2.5" fill="none" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-dasharray="1.5 4" stroke-linecap="round"/><polygon points="-18,2.5 -10.5,-0.5 -10.5,5.5" fill="${css("--color-primary")}"/><circle cx="17.5" r="4" fill="${css("--color-provider-claude")}"/>`,
+  // (the arrowhead) to the session that owes and turn just past it; the reply still owed arcs back as dashes that
+  // slow, shrink to dots and fade at an outlined arrowhead. The sending dashes are the reply's starting dashes; a
+  // 3 + 2.5 dash repeats every 5.5, so the flow's -11 offset loops cleanly.
+  owed: () => `<path class="lg-flow" d="M-20 -2.5L12 -2.5A2.5 2.5 0 0 1 12 2.5" fill="none" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-dasharray="3 2.5" stroke-linecap="round" opacity="0.9"/><g class="lg-flow-dots" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-linecap="round">${[0, 0.6, 1.2, 1.8].map(b => `<line x1="-1.5" x2="1.5" opacity="0"><animateMotion dur="2.4s" begin="-${b}s" repeatCount="indefinite" rotate="auto" path="M12 2.5Q2.9 4.2 -6.2 4" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.5 1 0.89 1"/><animate attributeName="x1" values="-1.5;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/><animate attributeName="x2" values="1.5;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.9;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/></line>`).join("")}</g><g class="lg-still" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-linecap="round"><line x1="10.5" y1="2.6" x2="13.5" y2="2.4" opacity="0.9"/><line x1="2.9" y1="3.7" x2="5.1" y2="3.5" opacity="0.68"/><line x1="-2.4" y1="4" x2="-1" y2="4" opacity="0.45"/><line x1="-5.5" y1="4" x2="-4.7" y2="4" opacity="0.23"/></g><polygon points="-13.7,3.5 -6,1 -6.4,7" fill="${css("--color-bg")}" stroke="${css("--color-primary")}" stroke-width="1" stroke-linejoin="round" opacity="0.5"/><circle cx="17.5" r="4" fill="${css("--color-provider-claude")}"/>`,
   unnamed: () => `<circle r="6" fill="${css("--color-provider-claude")}" opacity="0.55" stroke="${css("--color-surface")}" stroke-width="2" stroke-dasharray="1 2"/>`,
 };
 // The session's circle beside its title in the panel: the node's fill and mark, or a released node's dashed outline.
