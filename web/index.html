@@ -290,7 +290,7 @@ p.note { font-size: 0.8rem; color: var(--color-text-mid); margin: 0; line-height
 .node.off .body { opacity: 0.38; }
 /* Turn running (kaiusap-DS): the ring that grows from r + 4 and fades, grey because working isn't mail. */
 .node .wring { fill: none; stroke: var(--color-text-mid); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: owe 1.8s var(--ease-out) infinite; pointer-events: none; }
-.flow-arrow { fill: var(--color-bg); stroke: var(--color-primary); stroke-width: 1.5; stroke-linejoin: round; opacity: 0.5; pointer-events: none; }
+.flow-arrow { fill: var(--color-bg); stroke: var(--color-primary); stroke-width: 1.5; stroke-linejoin: round; opacity: 0.6; pointer-events: none; }
 @keyframes owe { from { transform: scale(1); opacity: 0.9; } to { transform: scale(1.7); opacity: 0; } }
 .node .label { font-family: var(--font-mono); font-size: 11px; fill: var(--color-text); text-anchor: middle; paint-order: stroke; stroke: var(--color-bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 .node .glyph { color: var(--color-text-on-provider); pointer-events: none; }
@@ -419,7 +419,7 @@ svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: n
 @media (pointer: coarse) and (max-width: 760px) {
   #z-out, #z-in { display: none; }
   .zoombar #z-reset { border-left: 0; }
-  .mapctl { bottom: 26px; }
+  .mapctl { bottom: calc(var(--target-min) / 2 + 4px); } /* the toggle's hit area rises half --target-min above the sizer, then a 4px gap */
 }
 @media (prefers-reduced-motion: reduce) {
   .flow { animation: none; }
