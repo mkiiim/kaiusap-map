@@ -89,7 +89,12 @@ const zoom = d3.zoom().scaleExtent([kMin, 2.5])
   .on("start", e => { if (e.sourceEvent?.type === "mousedown") stageEl.classList.add("panning"); })
   .on("zoom", e => { root.attr("transform", e.transform); showZoom(e.transform.k); })
   .on("end", e => { stageEl.classList.remove("panning"); if (e.sourceEvent) saveLayout(); });
-svg.call(zoom).on("dblclick.zoom", null);
+// A double tap zooms in on a touch screen, so a phone, which hides the zoom buttons, has a one-finger zoom
+// (WCAG 2.5.1). d3 handles the double tap itself and calls this listener; with a mouse, double-click stays off.
+const dblZoom = svg.call(zoom).on("dblclick.zoom"), coarse = matchMedia("(pointer: coarse)");
+const setDblZoom = () => svg.on("dblclick.zoom", coarse.matches ? dblZoom : null);
+setDblZoom();
+coarse.addEventListener("change", setDblZoom);
 // Show the open hand while Shift is held, so the pan is discoverable; the closed hand while dragging.
 const panReady = on => stageEl.classList.toggle("pan-ready", on);
 addEventListener("keydown", e => { if (e.key === "Shift") panReady(true); });
@@ -326,6 +331,7 @@ function ticked() {
     g.select("polygon").attr("points", k.arrow);
   });
   nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+  wakeOwed();
 }
 // The hook's geometry (kaiusap-DS "Owes a reply", with the legs moved off the line): the sending leg runs
 // `side` px to one side of the line, from just outside the asker's ring to 10px past the owing node's ring; a turn
@@ -370,12 +376,19 @@ function hook(a, b) {
 function other(l, id) { return l.source.id === id ? l.target : l.source; }
 // The reply still owed: dashes leave the turn at the sending dashes' speed (12px/s, 11px apart) and ease out along
 // the arc, slowing, shrinking to dots and fading to nothing at the arrowhead. Under reduced motion they hold still,
-// shrinking and fading the same way.
+// shrinking and fading the same way. The loop runs only while a reply is owed and motion is allowed: with no
+// hook, or under reduced motion, it draws once and stops, and wakeOwed starts it again when the hooks move
+// (every tick of the layout) or the motion setting changes.
 const OWED_DOTS = { gap: 11, speed: 12.2, dash: 4 };
+let owedFrame = 0;
+function wakeOwed() { if (!owedFrame) owedFrame = requestAnimationFrame(animateOwed); }
 function animateOwed(now) {
+  owedFrame = 0;
+  let owed = false;
   flowSel?.each(function (h) {
     const k = h.k;
     if (!k) return;
+    owed = true;
     const L = k.backLen, n = Math.max(2, Math.round(2 * L / OWED_DOTS.gap)), period = 2 * L / OWED_DOTS.speed * 1000;
     const base = stillMotion.matches ? 0 : now / period;
     d3.select(this).select(".flow-dots").selectAll("line").data(d3.range(n)).join("line")
@@ -387,9 +400,9 @@ function animateOwed(now) {
         this.setAttribute("opacity", (0.9 * (1 - p)).toFixed(2));
       });
   });
-  requestAnimationFrame(animateOwed);
+  if (owed && !stillMotion.matches) wakeOwed();
 }
-requestAnimationFrame(animateOwed);
+stillMotion.addEventListener("change", wakeOwed);
 
 // Dragging a picked session moves every picked session, keeping their spacing; each is pinned where it lands.
 function togglePick(d) { const p = basePick(); p.has(d) ? p.delete(d) : p.add(d); setPicked(p); }
@@ -887,7 +900,7 @@ const SWATCH = {
   // (the arrowhead) to the session that owes and turn just past it; the reply still owed arcs back as dashes that
   // slow, shrink to dots and fade at an outlined arrowhead. The sending dashes are the reply's starting dashes; a
   // 3 + 2.5 dash repeats every 5.5, so the flow's -11 offset loops cleanly.
-  owed: () => `<path class="lg-flow" d="M-20 -2.5L12 -2.5A2.5 2.5 0 0 1 12 2.5" fill="none" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-dasharray="3 2.5" stroke-linecap="round" opacity="0.9"/><g class="lg-flow-dots" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-linecap="round">${[0, 0.6, 1.2, 1.8].map(b => `<line x1="-1.5" x2="1.5" opacity="0"><animateMotion dur="2.4s" begin="-${b}s" repeatCount="indefinite" rotate="auto" path="M12 2.5Q2.9 4.2 -6.2 4" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.5 1 0.89 1"/><animate attributeName="x1" values="-1.5;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/><animate attributeName="x2" values="1.5;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.9;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/></line>`).join("")}</g><g class="lg-still" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-linecap="round"><line x1="10.5" y1="2.6" x2="13.5" y2="2.4" opacity="0.9"/><line x1="2.9" y1="3.7" x2="5.1" y2="3.5" opacity="0.68"/><line x1="-2.4" y1="4" x2="-1" y2="4" opacity="0.45"/><line x1="-5.5" y1="4" x2="-4.7" y2="4" opacity="0.23"/></g><polygon points="-13.7,3.5 -6,1 -6.4,7" fill="${css("--color-bg")}" stroke="${css("--color-primary")}" stroke-width="1" stroke-linejoin="round" opacity="0.5"/><circle cx="17.5" r="4" fill="${css("--color-provider-claude")}"/>`,
+  owed: () => `<path class="lg-flow" d="M-20 -2.5L12 -2.5A2.5 2.5 0 0 1 12 2.5" fill="none" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-dasharray="3 2.5" stroke-linecap="round" opacity="0.9"/><g class="lg-flow-dots" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-linecap="round">${[0, 0.6, 1.2, 1.8].map(b => `<line x1="-1.5" x2="1.5" opacity="0"><animateMotion dur="2.4s" begin="-${b}s" repeatCount="indefinite" rotate="auto" path="M12 2.5Q2.9 4.2 -6.2 4" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines="0.5 1 0.89 1"/><animate attributeName="x1" values="-1.5;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/><animate attributeName="x2" values="1.5;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.9;0" dur="2.4s" begin="-${b}s" repeatCount="indefinite"/></line>`).join("")}</g><g class="lg-still" stroke="${css("--color-primary")}" stroke-width="1.5" stroke-linecap="round"><line x1="10.5" y1="2.6" x2="13.5" y2="2.4" opacity="0.9"/><line x1="2.9" y1="3.7" x2="5.1" y2="3.5" opacity="0.68"/><line x1="-2.4" y1="4" x2="-1" y2="4" opacity="0.45"/><line x1="-5.5" y1="4" x2="-4.7" y2="4" opacity="0.23"/></g><polygon points="-13.7,3.5 -6,1 -6.4,7" fill="${css("--color-bg")}" stroke="${css("--color-primary")}" stroke-width="1" stroke-linejoin="round" opacity="0.6"/><circle cx="17.5" r="4" fill="${css("--color-provider-claude")}"/>`,
   unnamed: () => `<circle r="6" fill="${css("--color-provider-claude")}" opacity="0.55" stroke="${css("--color-surface")}" stroke-width="2" stroke-dasharray="1 2"/>`,
 };
 // The session's circle beside its title in the panel: the node's fill and mark, or a released node's dashed outline.
