@@ -19,7 +19,7 @@ Installed, it's the `kaiusap-map` command, with web/ beside this file; in the
 repo it runs as `python3 server/kaiusap_map.py`, with web/ one folder up.
 """
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 import argparse
 import json
@@ -237,6 +237,7 @@ class Hub:
         return json.dumps({
             "schema": 1, "demo": self.demo, "updated": self.updated, "host": HOST,
             "error": self.error, "warnings": self.warnings, "nodes": self.nodes,
+            "focus_unavailable": focus.unavailable_reason(),
             "messages": sorted(self.messages.values(), key=lambda m: (m["at"], m["id"])),
         })
 

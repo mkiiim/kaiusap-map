@@ -3,6 +3,8 @@
 // nodes: {id, provider, project (group key), groupLabel, state, unread, name, reason, waiting, owes, spawned, named, dir, r, ...}
 let nodes = [], links = [], byId = new Map();
 let demo = false, subjects = [], liveMessages = [], seenIds = null;
+// Why the server can't bring windows forward on its machine (no focus backend, as on Linux), or null when it can.
+let noFocus = null;
 let lastUpdate = null, lastError = null;
 
 // ---------- helpers ----------
@@ -933,15 +935,23 @@ function hostOf(d) {
 // even once the session has ended, since the app reopens it from its link: "Show in Claude" when the link lands on
 // the session, "Open Claude" when it only brings the app forward. Else a terminal when the session has an attached tmux
 // pane, or runs outside tmux (the server looks for its title in Ghostty), or is a Codex thread kaiusap can't place
-// ("unknown") that may still be open in a terminal when it's reachable.
+// ("unknown") that may still be open in a terminal when it's reachable. When the server has no way to bring windows
+// forward, the answer carries `off`, the reason, and every place shows the action greyed out with that reason.
 function bringForward(d) {
+  const fwd = bringForwardHere(d);
+  if (!fwd || !noFocus) return fwd;
+  const lead = fwd.kind === "app" ? `${d.where === "not_running" ? "Last run" : "Running"} in ${fwd.app}. `
+    : d.where === "not_in_tmux" ? "Running outside tmux, so there's nothing to attach to. " : "";
+  return { ...fwd, off: noFocus, note: lead + noFocus };
+}
+function bringForwardHere(d) {
   if (d.demo || d.released) return null;
   const h = hostOf(d);
   if (h) {
     // text, row and tip go into HTML as they are, so they carry the escaped name; the note is escaped where it's shown.
     const raw = h.name || "its app", app = esc(raw), on = !!h.link && h.link_opens === "session";
     const say = name => on ? `Show in ${name}` : `Open ${name}`;
-    return { kind: "app", text: say(app), note: `${d.where === "not_running" ? "Last run" : "Running"} in ${raw}: use ${say(raw)}.`,
+    return { kind: "app", app: raw, text: say(app), note: `${d.where === "not_running" ? "Last run" : "Running"} in ${raw}: use ${say(raw)}.`,
       row: name => on ? `Show ${name} in ${app}` : `Open ${app}, where ${name} runs`,
       tip: name => on ? `Bring ${app} to the front on ${name}` : `Bring ${app} to the front`, icon14: HOST_ICON_14, icon16: HOST_ICON_16 };
   }
@@ -992,9 +1002,10 @@ const HOST_ICON_16 = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidde
 function rowAct(n) {
   if (!n || typeof n !== "object") return "";
   const name = esc(label(n)), fwd = bringForward(n);
-  if (fwd) return `<button type="button" class="icon row-act" data-rfocus="${esc(n.id)}" aria-label="${fwd.row(name)}" title="${fwd.tip(name)}">${fwd.icon14}</button>`;
+  if (fwd && !fwd.off) return `<button type="button" class="icon row-act" data-rfocus="${esc(n.id)}" aria-label="${fwd.row(name)}" title="${fwd.tip(name)}">${fwd.icon14}</button>`;
   const back = getBack(n);
   if (back.cmd) return `<button type="button" class="icon row-act" data-rcopy="${esc(back.cmd)}" aria-label="Copy ${name}'s command" title="Copy: ${esc(back.cmd)}">${COPY_ICON}</button>`;
+  if (fwd) return `<button type="button" class="icon row-act" aria-disabled="true" data-rwhy="${esc(fwd.off)}" aria-label="${fwd.row(name)}: unavailable. ${esc(fwd.off)}" title="${esc(fwd.off)}">${fwd.icon14}</button>`;
   const why = back.note || "There's no command to get back to this session.";
   return `<button type="button" class="icon row-act" aria-disabled="true" data-rwhy="${esc(why)}" aria-label="Copy ${name}'s command: unavailable. ${esc(why)}" title="${esc(why)}">${COPY_ICON}</button>`;
 }
@@ -1043,9 +1054,11 @@ const ctxEl = document.getElementById("ctx"), ctxStatus = document.getElementByI
 let ctxFrom = null, ctxTimer = 0;
 function openCtx(d, e) {
   clearTimeout(ctxTimer); ctxStatus.textContent = "";
-  const name = esc(label(d)), fwd = bringForward(d), back = fwd ? null : getBack(d);
+  const name = esc(label(d)), fwd = bringForward(d), back = fwd && !fwd.off ? null : getBack(d);
   ctxEl.innerHTML = !back
     ? `<button type="button" role="menuitem" data-cfocus="${esc(d.id)}">${fwd.icon14}<span class="ctx-text">${fwd.text}</span></button>`
+    : fwd && !back.cmd
+      ? `<button type="button" role="menuitem" aria-disabled="true">${fwd.icon14}<span class="ctx-text">${fwd.text}<small>${esc(fwd.off)}</small></span></button>`
     : back.cmd
       ? `<button type="button" role="menuitem" data-ccopy="${esc(back.cmd)}" title="${esc(back.cmd)}">${COPY_ICON}<span class="ctx-text">Copy command<code>${esc(back.cmd)}</code></span></button>`
       : `<button type="button" role="menuitem" aria-disabled="true">${COPY_ICON}<span class="ctx-text">No command to copy<small>${esc(back.note || "There's no command to get back to this session.")}</small></span></button>`;
@@ -1164,7 +1177,9 @@ function sessionPanel(d) {
   panel.innerHTML = `
     <div class="panel-head"><div class="eyebrow">${d.spawned ? "Spawned agent" : `${providerOf(d.provider).name} session`}</div>
       <h2 class="with-mark">${titleBadge(d)}<span>${esc(label(d))}</span></h2></div>
-    <div class="pill-row">${pill(d)}${fwd ? `<button type="button" class="icon" data-focus="${esc(d.id)}" aria-label="${fwd.text}" title="${fwd.tip("this session")}">
+    <div class="pill-row">${pill(d)}${fwd ? `<button type="button" class="icon" data-focus="${esc(d.id)}" ${fwd.off
+        ? `aria-disabled="true" aria-label="${fwd.text}: unavailable. ${esc(fwd.off)}" title="${esc(fwd.off)}"`
+        : `aria-label="${fwd.text}" title="${fwd.tip("this session")}"`}>
         ${fwd.icon16}</button>` : ""}
       <span class="focus-msg ${focusMsg.get(d.id)?.ok === false ? "bad" : ""}" role="status" title="${esc(focusMsg.get(d.id)?.message || "")}">${esc(focusMsg.get(d.id)?.short || "")}</span></div>
     <div class="getback">${back.cmd ? `<div class="cmd"><code>${esc(back.cmd)}</code><button type="button" class="icon" data-copy="${esc(back.cmd)}" aria-label="Copy command" title="Copy">${COPY_ICON}</button></div>` : ""}${back.note ? `<p class="note">${esc(back.note)}</p>` : ""}</div>
@@ -1205,7 +1220,12 @@ function sessionPanel(d) {
     if (was && oldH) ease(panel.querySelector(`[data-conv="${CSS.escape(was)}"]`)?.closest("li"), "marginBottom", oldH, 0);
     if (e.detail === 0) panel.querySelector(`[data-conv="${CSS.escape(k)}"]`)?.focus();
   }));
-  panel.querySelector("[data-focus]")?.addEventListener("click", e => showTerminal(d.id, e.currentTarget));
+  // Greyed out: a tap says why under the button, without asking the server.
+  panel.querySelector("[data-focus]")?.addEventListener("click", e => {
+    if (!fwd.off) return showTerminal(d.id, e.currentTarget);
+    focusMsg.set(d.id, { ok: false, short: "Not available", message: fwd.off });
+    select(selected);
+  });
 }
 // One word per state, so every pill in a thread list is the same width; the full state is on hover.
 function msgPill(m) {
@@ -1887,6 +1907,7 @@ function showHost(host) {
 }
 function onState(s) {
   showHost(s.host);
+  noFocus = s.focus_unavailable || null;
   if (s.demo) { if (es) es.close(); es = null; return enterDemo(); }
   if (!layoutLoaded) { layoutLoaded = true; layout = loadLayout(); restoreZoom(); }
   lastUpdate = s.updated;
