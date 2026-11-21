@@ -66,7 +66,7 @@ kaiusap-map stop
 uv tool uninstall kaiusap-map
 ```
 
-This leaves `~/.local/state/kaiusap-map/`, which holds only the background server's pid and log, for you to delete. The map's layout is kept in your browser, not on disk.
+This leaves `~/.local/state/kaiusap-map/`, which holds only the background server's pid and log and your saved layouts, for you to delete.
 
 ## Run the map
 
@@ -143,7 +143,7 @@ Collapse the panel when you don't need it, or drag its top edge to change its si
 - **Pin**, **Unpin** and **Tidy** (P, U, T) act on the selection, or on everything when nothing is selected.
 - Shift-drag to move the map, and scroll or pinch to zoom. The zoom bar can also centre the selection or fit everything in view.
 
-Your layout is kept in the browser, so it's still there after a refresh or a restart.
+Your layout is kept by the map, so it's still there after a refresh or a restart, and every map you open shows the same one. Phones have a layout of their own, since a phone's screen is a different shape. When you pin, move or unpin a pinned circle, the change follows in your other open maps. The zoom is kept in each browser.
 
 ### Get back to a session
 
@@ -213,7 +213,9 @@ The map runs only `kaiusap who`, `kaiusap sessions` and `kaiusap messages --prev
 
 It listens only on this computer (`127.0.0.1`), plus your Tailscale address with `--tailnet`, and has no login. So anything that can reach that port can see your sessions and the start of each message: other accounts on this computer and, with `--tailnet`, every device on your tailnet.
 
-The map is read-only on purpose. Sending, replying, marking messages moot, or changing handles from the map would need a new contract with kAIusap, and a much harder look at safety and security, since the map has no login.
+The map writes one file of its own, `~/.local/state/kaiusap-map/layouts.json`, which holds where your circles sit and which are pinned. Like Show in terminal, saving a layout is open to anything that can reach the port.
+
+The map is read-only towards kAIusap on purpose. Sending, replying, marking messages moot, or changing handles from the map would need a new contract with kAIusap, and a much harder look at safety and security, since the map has no login.
 
 ## Development
 
