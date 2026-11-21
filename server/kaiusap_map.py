@@ -283,9 +283,10 @@ class Hub:
             errors.append(str(e))
         error = "; ".join(errors) or None
         with self.cond:
-            self.updated = now_iso()
-            changed = ((nodes, warnings, error, messages)
+            # The first poll always counts as a change, so pages get a first state even when it's empty.
+            changed = (self.version == 0 or (nodes, warnings, error, messages)
                        != (self.nodes, self.warnings, self.error, self.messages))
+            self.updated = now_iso()
             self.nodes, self.warnings, self.error, self.messages = nodes, warnings, error, messages
             self.payload = self._encode()
             if changed:
@@ -595,7 +596,8 @@ def make_handler(hub, port, names=()):
             lay = hub.layouts if hub.layouts and LAYOUT_KEY.fullmatch(key) and TAB_ID.fullmatch(tab) else None
             hub.connect()
             try:
-                seen = lseen = -1
+                # Version 0 is "not polled yet": wait for the first poll rather than looping on it.
+                seen, lseen = 0, -1
                 if lay:
                     with hub.cond:
                         entries, empty = lay.get(key)
