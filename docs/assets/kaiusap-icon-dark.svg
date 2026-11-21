@@ -1,9 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 72 72" fill="none" stroke="#e8e6e1" stroke-width="2" role="img" aria-label="kaiusap">
-  <rect x="0" y="0" width="70" height="70" rx="15"/>
-  <path d="M17.5 35 54.5 54.5"/>
-  <path d="M31.49 27.24 47.15 18.56" stroke-linecap="round" stroke-dasharray="0 2.984"/>
-  <circle cx="17.5" cy="35" r="15" fill="#fcd116" stroke="none"/>
-  <circle cx="17.5" cy="35" r="14" stroke-width="4" stroke-dasharray="7.037 1.759" stroke-dashoffset="8.065"/>
-  <circle cx="56.77" cy="13.23" r="10" fill="#0038a8"/>
-  <circle cx="54.5" cy="54.5" r="13" fill="#ce1126"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-6 -5 82 82" fill="none" role="img" aria-label="kaiusap">
+<defs>
+<filter id="kid-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
+<filter id="kid-tshadow" x="-30%" y="-30%" width="160%" height="170%"><feGaussianBlur stdDeviation="2.4"/></filter>
+<linearGradient id="kid-tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2e33"/><stop offset="1" stop-color="#16181b"/></linearGradient>
+<linearGradient id="kid-sheen" x1="0" y1="0" x2=".7" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.06"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="kid-edge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".65"/><stop offset=".4" stop-color="#fff" stop-opacity=".1"/><stop offset=".75" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#fff" stop-opacity=".35"/></linearGradient>
+<linearGradient id="kid-ring" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f2ed"/><stop offset="1" stop-color="#cfccc5"/></linearGradient>
+</defs>
+<use href="#kid-sq" fill="#000" opacity="0.38" transform="translate(0 2.2)" filter="url(#kid-tshadow)"/>
+<path id="kid-sq" d="M70.00 35.00 70.00 43.15 69.98 45.75 69.96 47.65 69.92 49.18 69.88 50.50 69.83 51.66 69.76 52.71 69.69 53.67 69.61 54.56 69.52 55.38 69.42 56.15 69.30 56.88 69.18 57.57 69.05 58.22 68.91 58.83 68.76 59.42 68.59 59.98 68.42 60.52 68.24 61.03 68.04 61.53 67.84 62.00 67.62 62.45 67.39 62.88 67.16 63.30 66.90 63.70 66.64 64.08 66.37 64.45 66.08 64.80 65.78 65.14 65.47 65.47 65.14 65.78 64.80 66.08 64.45 66.37 64.08 66.64 63.70 66.90 63.30 67.16 62.88 67.39 62.45 67.62 62.00 67.84 61.53 68.04 61.03 68.24 60.52 68.42 59.98 68.59 59.42 68.76 58.83 68.91 58.22 69.05 57.57 69.18 56.88 69.30 56.15 69.42 55.38 69.52 54.56 69.61 53.67 69.69 52.71 69.76 51.66 69.83 50.50 69.88 49.18 69.92 47.65 69.96 45.75 69.98 43.15 70.00 35.00 70.00 26.85 70.00 24.25 69.98 22.35 69.96 20.82 69.92 19.50 69.88 18.34 69.83 17.29 69.76 16.33 69.69 15.44 69.61 14.62 69.52 13.85 69.42 13.12 69.30 12.43 69.18 11.78 69.05 11.17 68.91 10.58 68.76 10.02 68.59 9.48 68.42 8.97 68.24 8.47 68.04 8.00 67.84 7.55 67.62 7.12 67.39 6.70 67.16 6.30 66.90 5.92 66.64 5.55 66.37 5.20 66.08 4.86 65.78 4.53 65.47 4.22 65.14 3.92 64.80 3.63 64.45 3.36 64.08 3.10 63.70 2.84 63.30 2.61 62.88 2.38 62.45 2.16 62.00 1.96 61.53 1.76 61.03 1.58 60.52 1.41 59.98 1.24 59.42 1.09 58.83 0.95 58.22 0.82 57.57 0.70 56.88 0.58 56.15 0.48 55.38 0.39 54.56 0.31 53.67 0.24 52.71 0.17 51.66 0.12 50.50 0.08 49.18 0.04 47.65 0.02 45.75 0.00 43.15 0.00 35.00 0.00 26.85 0.02 24.25 0.04 22.35 0.08 20.82 0.12 19.50 0.17 18.34 0.24 17.29 0.31 16.33 0.39 15.44 0.48 14.62 0.58 13.85 0.70 13.12 0.82 12.43 0.95 11.78 1.09 11.17 1.24 10.58 1.41 10.02 1.58 9.48 1.76 8.97 1.96 8.47 2.16 8.00 2.38 7.55 2.61 7.12 2.84 6.70 3.10 6.30 3.36 5.92 3.63 5.55 3.92 5.20 4.22 4.86 4.53 4.53 4.86 4.22 5.20 3.92 5.55 3.63 5.92 3.36 6.30 3.10 6.70 2.84 7.12 2.61 7.55 2.38 8.00 2.16 8.47 1.96 8.97 1.76 9.48 1.58 10.02 1.41 10.58 1.24 11.17 1.09 11.78 0.95 12.43 0.82 13.12 0.70 13.85 0.58 14.62 0.48 15.44 0.39 16.33 0.31 17.29 0.24 18.34 0.17 19.50 0.12 20.82 0.08 22.35 0.04 24.25 0.02 26.85 0.00 35.00 0.00 43.15 0.00 45.75 0.02 47.65 0.04 49.18 0.08 50.50 0.12 51.66 0.17 52.71 0.24 53.67 0.31 54.56 0.39 55.38 0.48 56.15 0.58 56.88 0.70 57.57 0.82 58.22 0.95 58.83 1.09 59.42 1.24 59.98 1.41 60.52 1.58 61.03 1.76 61.53 1.96 62.00 2.16 62.45 2.38 62.88 2.61 63.30 2.84 63.70 3.10 64.08 3.36 64.45 3.63 64.80 3.92 65.14 4.22 65.47 4.53 65.78 4.86 66.08 5.20 66.37 5.55 66.64 5.92 66.90 6.30 67.16 6.70 67.39 7.12 67.62 7.55 67.84 8.00 68.04 8.47 68.24 8.97 68.42 9.48 68.59 10.02 68.76 10.58 68.91 11.17 69.05 11.78 69.18 12.43 69.30 13.12 69.42 13.85 69.52 14.62 69.61 15.44 69.69 16.33 69.76 17.29 69.83 18.34 69.88 19.50 69.92 20.82 69.96 22.35 69.98 24.25 70.00 26.85Z" fill="url(#kid-tile)"/>
+<use href="#kid-sq" fill="url(#kid-sheen)"/>
+<use href="#kid-sq" fill="none" stroke="#fff" stroke-opacity="0.06" stroke-width=".5"/>
+<use href="#kid-sq" fill="none" stroke="url(#kid-edge)" stroke-width="1" transform="translate(35 35) scale(.985) translate(-35 -35)"/>
+<path d="M17.5 35 54.5 54.5" stroke="#e8e6e1" stroke-width="2" opacity=".8"/>
+<path d="M31.49 27.24 47.15 18.56" stroke="#e8e6e1" stroke-width="2" stroke-linecap="round" stroke-dasharray="0 2.984" opacity=".8"/>
+<defs>
+<radialGradient id="kid-yb" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#fdde57"/><stop offset=".55" stop-color="#fcd116"/><stop offset="1" stop-color="#d4b012"/></radialGradient>
+<radialGradient id="kid-yc" cx=".5" cy=".9" r=".55"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<linearGradient id="kid-yt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="kid-yr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".3"/></linearGradient>
+</defs>
+<ellipse cx="17.5" cy="39.80" rx="13.80" ry="12.00" fill="#d4b012" opacity=".28" filter="url(#kid-soft)"/>
+<circle cx="17.5" cy="35" r="15" fill="url(#kid-yb)"/>
+<circle cx="17.5" cy="35" r="15" fill="url(#kid-yc)"/>
+<ellipse cx="17.5" cy="28.25" rx="9.30" ry="5.40" fill="url(#kid-yt)"/>
+<circle cx="17.5" cy="35" r="14.65" fill="none" stroke="url(#kid-yr)" stroke-width=".7"/>
+<circle cx="17.5" cy="35" r="14" fill="none" stroke="url(#kid-ring)" stroke-width="4" stroke-dasharray="7.037 1.759" stroke-dashoffset="8.065" opacity=".8"/>
+<circle cx="17.5" cy="35" r="15.6" fill="none" stroke="url(#kid-yr)" stroke-width=".6" opacity=".55"/>
+<defs>
+<radialGradient id="kid-bb" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#4770c0"/><stop offset=".55" stop-color="#0038a8"/><stop offset="1" stop-color="#002f8d"/></radialGradient>
+<radialGradient id="kid-bc" cx=".5" cy=".9" r=".55"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<linearGradient id="kid-bt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="kid-br" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".3"/></linearGradient>
+</defs>
+<ellipse cx="56.77" cy="16.43" rx="9.20" ry="8.00" fill="#002f8d" opacity=".28" filter="url(#kid-soft)"/>
+<circle cx="56.77" cy="13.23" r="10" fill="url(#kid-bb)"/>
+<circle cx="56.77" cy="13.23" r="10" fill="url(#kid-bc)"/>
+<ellipse cx="56.77" cy="8.73" rx="6.20" ry="3.60" fill="url(#kid-bt)"/>
+<circle cx="56.77" cy="13.23" r="9.65" fill="none" stroke="url(#kid-br)" stroke-width=".7"/>
+<defs>
+<radialGradient id="kid-rb" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#dc5463"/><stop offset=".55" stop-color="#ce1126"/><stop offset="1" stop-color="#ad0e20"/></radialGradient>
+<radialGradient id="kid-rc" cx=".5" cy=".9" r=".55"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<linearGradient id="kid-rt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="kid-rr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".3"/></linearGradient>
+</defs>
+<ellipse cx="54.5" cy="58.66" rx="11.96" ry="10.40" fill="#ad0e20" opacity=".28" filter="url(#kid-soft)"/>
+<circle cx="54.5" cy="54.5" r="13" fill="url(#kid-rb)"/>
+<circle cx="54.5" cy="54.5" r="13" fill="url(#kid-rc)"/>
+<ellipse cx="54.5" cy="48.65" rx="8.06" ry="4.68" fill="url(#kid-rt)"/>
+<circle cx="54.5" cy="54.5" r="12.65" fill="none" stroke="url(#kid-rr)" stroke-width=".7"/>
 </svg>
