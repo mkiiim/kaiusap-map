@@ -237,6 +237,7 @@ class Hub:
         return json.dumps({
             "schema": 1, "demo": self.demo, "updated": self.updated, "host": HOST,
             "error": self.error, "warnings": self.warnings, "nodes": self.nodes,
+            "focus_unavailable": focus.unavailable_reason(),
             "messages": sorted(self.messages.values(), key=lambda m: (m["at"], m["id"])),
         })
 

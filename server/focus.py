@@ -317,7 +317,12 @@ BACKENDS = backends_for(sys.platform)
 
 def unavailable():
     names = " and ".join(name for name, _ in PLATFORMS.values())
-    return False, "Not available", f"Show in terminal works only on {names} for now."
+    return False, "Not available", f"Bringing a session's window to the front works only on {names} for now."
+
+
+def unavailable_reason():
+    """Why Show in terminal can't work on this machine, for the map to show up front; None when it can."""
+    return None if BACKENDS else unavailable()[2]
 
 
 def denied(backends):
