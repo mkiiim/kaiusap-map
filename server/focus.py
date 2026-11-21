@@ -275,11 +275,37 @@ def host_of(node):
     return None
 
 
+# A session popped out of the Claude desktop app into its own window: that window is titled with the
+# session's name, as kaiusap reports it, while the main window is titled with the app's (seen live
+# 2026-11-21). Raise the one window with that title, un-minimised, through System Events, which needs
+# Accessibility access. "none" when there's no such window, "several" when the title is ambiguous.
+POPOUT_RAISE = """
+on run argv
+  set target to item 1 of argv
+  tell application "System Events"
+    set ps to (processes whose bundle identifier is (item 2 of argv))
+    if (count of ps) is 0 then return "none"
+    tell item 1 of ps
+      set ws to (windows whose name is target)
+      if (count of ws) is 0 then return "none"
+      if (count of ws) > 1 then return "several"
+      set w to item 1 of ws
+      if value of attribute "AXMinimized" of w is true then set value of attribute "AXMinimized" of w to false
+      perform action "AXRaise" of w
+      set frontmost to true
+    end tell
+  end tell
+  return "ok"
+end run
+"""
+
+
 class HostMac(MacBackend):
     """An app that hosts the session itself (the Claude desktop app), opened by its bundle id: on the
     session through the app's link when it has one, else just brought forward. `open -b` launches an
     app that isn't running, which is what's wanted: the Claude app reopens an ended session from its
-    link (seen live 2026-11-16)."""
+    link (seen live 2026-11-16). A session popped out into its own window is raised there first, since
+    the link would switch the main window to it instead."""
     label, opens = "the app", True
 
     def available(self):
@@ -289,10 +315,23 @@ class HostMac(MacBackend):
         h = host_of(node)
         return (h and h.get("name")) or self.label
 
+    def raise_popout(self, node, h):
+        """True when the session's own pop-out window came forward. Anything else (no pop-out, two
+        windows with its title, no Accessibility access, an error) leaves it to the link."""
+        name = node.get("name")
+        if not (h.get("pid") and isinstance(name, str) and name.strip() and name != h.get("name")):
+            return False
+        try:
+            return osa(POPOUT_RAISE, name, h["app_id"]) == "ok"
+        except subprocess.TimeoutExpired:
+            return False
+
     def focus_session(self, node):
         h = host_of(node)
         if not h:
             return "none"
+        if self.raise_popout(node, h):
+            return "ok"
         args = ["open", "-b", h["app_id"]] + ([h["link"]] if h["link"] else [])
         p = subprocess.run(args, capture_output=True, text=True, timeout=OSA_TIMEOUT)
         return "ok" if p.returncode == 0 else "error: " + (p.stderr.strip()[:200] or f"open exited {p.returncode}")
