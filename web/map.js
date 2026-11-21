@@ -582,16 +582,28 @@ function applyNodes(incoming, newLinks = []) {
   select(selected);
 }
 // ---------- layout memory ----------
-// Positions, pins and the zoom live in this browser's localStorage, so a refresh or a restart puts nodes
-// back where they were. Stored as fractions of the map's size, so a resized window still roughly fits.
-// Demo and live layouts are kept apart. Entries unseen for 30 days are dropped.
+// Positions and pins are kept by the server, one layout for phones and one for everything else, so every
+// open map of the same kind starts from the same layout; a pin, a pinned move or an unpin in one follows in
+// the others. Each page sends only the sessions that changed, and nothing when nothing did. The zoom stays
+// in this browser. This browser's localStorage keeps a copy too, used when the server doesn't keep layouts
+// (an older one) and for the example data, which stays in the browser. Stored as fractions of the map's
+// size, so a resized window still roughly fits. Demo and live layouts are kept apart. Entries unseen for
+// 30 days are dropped.
 const LAYOUT_DAYS = 30;
+const PHONE = matchMedia("(pointer: coarse) and (max-width: 760px)");
+const screenKind = () => PHONE.matches ? "phone" : "desktop";
+let kind = screenKind();
+// This page's own id, so the server doesn't send its own pin changes back to it.
+const tabId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+let serverLayout = false;  // the server keeps this page's layout
+let switching = false;     // the screen changed kind: take the other layout's places as well as its pins
+let sent = {};             // each session as the server has it, from this page or from the server
 const layoutKey = () => demo ? "layout-demo" : "layout";
 function loadLayout() {
   try { return JSON.parse(localStorage.getItem(layoutKey())) || { nodes: {} }; } catch (e) { return { nodes: {} }; }
 }
 let layout = { nodes: {} };
-function saveLayout() {
+function saveLayout(leaving) {
   if (!nodes.length) return;
   const now = Date.now(), keep = {};
   for (const [id, v] of Object.entries(layout.nodes || {})) if (now - (v.t || 0) < LAYOUT_DAYS * 864e5) keep[id] = v;
@@ -599,7 +611,95 @@ function saveLayout() {
   const t = d3.zoomTransform(svg.node());
   layout = { nodes: keep, zoom: { x: Math.round(t.x), y: Math.round(t.y), k: +t.k.toFixed(3) } };
   try { localStorage.setItem(layoutKey(), JSON.stringify(layout)); } catch (e) {}
+  postLayout(keep, leaving === true);
 }
+// Send the server the sessions that differ from what it has: pinned or unpinned, or moved more than 2px.
+// A pin change goes at once. The live map never quite settles (each update nudges it), so free sessions'
+// places go at most every FREE_POST ms, and when the page is hidden or closed: other maps only read them
+// when they load.
+const FREE_POST = 30000;
+let freePosted = 0;
+function postLayout(entries, leaving = false) {
+  if (!serverLayout || demo) return;
+  const out = {};
+  let pins = false;
+  for (const [id, v] of Object.entries(entries)) {
+    // The server refuses a whole save with a place it won't keep (more than 10 map-sizes away), so leave those out.
+    if (!(Math.abs(v.x) <= 10 && Math.abs(v.y) <= 10) || id.length > 200) continue;
+    const s = sent[id], pinned = !!v.pinned;
+    const moved = !s || Math.abs(v.x - s.x) * W > 2 || Math.abs(v.y - s.y) * H > 2;
+    if (s && s.pinned === pinned && !moved) continue;
+    out[id] = { x: v.x, y: v.y, pinned };
+    if (s ? s.pinned !== pinned || pinned : pinned) pins = true;
+  }
+  const ids = Object.keys(out);
+  if (!ids.length || (!pins && !leaving && Date.now() - freePosted < FREE_POST)) return;
+  freePosted = Date.now();
+  const was = {};
+  for (const id of ids) { was[id] = sent[id]; sent[id] = out[id]; }
+  const body = JSON.stringify({ key: kind, tab: tabId, nodes: out });
+  // keepalive lets a save made as the tab closes finish; it's limited to 64 KB. A save that didn't arrive
+  // is sent again with the next one; one the server refused (4xx) isn't, since it would be refused again.
+  const undo = () => { for (const id of ids) if (sent[id] === out[id]) { if (was[id]) sent[id] = was[id]; else delete sent[id]; } };
+  fetch("api/layout", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 60000 })
+    .then(r => { if (r.status >= 500) undo(); }, undo);
+}
+// The server's layout for this page's kind of screen: all of it when the page connects, else other pages'
+// pin changes. Pins are taken; free sessions keep settling here, so open maps never tug at each other.
+function onLayout(m) {
+  if (m.key !== kind || demo) return;
+  serverLayout = true;
+  const now = Date.now(), stamp = e => { const o = {}; for (const [id, v] of Object.entries(e)) o[id] = { ...v, t: now }; return o; };
+  if (m.push) {
+    Object.assign(sent, m.nodes);
+    Object.assign(layout.nodes, stamp(m.nodes));
+    return adoptPins(m.nodes, false);
+  }
+  if (!layoutLoaded) {
+    // The page's first: no sessions yet. A new server layout starts from this browser's own.
+    layoutLoaded = true;
+    const local = loadLayout();
+    layout = m.empty ? local : { nodes: stamp(m.nodes), zoom: local.zoom };
+    restoreZoom();
+    sent = m.empty ? {} : { ...m.nodes };
+    if (m.empty) postLayout(layout.nodes || {}, true);
+    return;
+  }
+  // A reconnect, or the screen changed kind.
+  sent = { ...m.nodes };
+  Object.assign(layout.nodes, stamp(m.nodes));
+  if (m.empty) { switching = false; return saveLayout(true); }
+  adoptPins(m.nodes, switching);
+  switching = false;
+}
+// Take others' pins; with places, the free sessions' places too.
+function adoptPins(entries, places) {
+  let moved = false, freed = false;
+  for (const n of nodes) {
+    const v = entries[n.id];
+    if (!v) continue;
+    const x = v.x * W, y = v.y * H;
+    if (v.pinned) {
+      if (!n.pinned || Math.abs(x - n.fx) > 1 || Math.abs(y - n.fy) > 1) { n.x = n.fx = x; n.y = n.fy = y; n.pinned = true; moved = true; }
+      continue;
+    }
+    if (n.pinned) { n.fx = n.fy = null; n.vx = n.vy = 0; n.pinned = false; freed = true; }
+    if (places) { n.x = x; n.y = y; moved = true; }
+  }
+  if (!moved && !freed) return;
+  updateNodes(); ticked();
+  // Unpinning moves nothing, as it doesn't here.
+  if (moved) sim.alpha(Math.max(sim.alpha(), 0.3)).restart();
+}
+// A phone turned wide, or a window narrowed on a touch screen: switch to the other layout.
+PHONE.addEventListener("change", () => {
+  if (screenKind() === kind) return;
+  saveLayout(true);
+  kind = screenKind();
+  if (!serverLayout) return;
+  serverLayout = false; switching = true; sent = {};
+  if (es) { es.close(); es = null; connect(); }
+});
 function restoreZoom() {
   const z = layout.zoom;
   if (z) svg.call(zoom.transform, d3.zoomIdentity.translate(z.x, z.y).scale(z.k));
@@ -612,10 +712,10 @@ function restorePosition(n) {
   if (v.pinned) { n.fx = n.x; n.fy = n.y; n.pinned = true; }
   return true;
 }
-sim.on("end.layout", saveLayout);
-setInterval(() => { if (sim.alpha() > sim.alphaMin()) saveLayout(); }, 5000);
-addEventListener("pagehide", saveLayout);
-document.addEventListener("visibilitychange", () => { if (document.hidden) saveLayout(); });
+sim.on("end.layout", () => saveLayout());
+setInterval(() => { if (sim.alpha() > sim.alphaMin() && !document.hidden) saveLayout(); }, 5000);
+addEventListener("pagehide", () => saveLayout(true));
+document.addEventListener("visibilitychange", () => { if (document.hidden) saveLayout(true); });
 
 // New nodes go to their saved place, else next to their group, else around a circle by group.
 // Returns how many had no saved place.
@@ -1933,7 +2033,8 @@ setInterval(() => { if (demo || !links.length) return; refreshAges(); render(0);
 let es = null;
 function connect() {
   if (es || demo) return;
-  es = new EventSource("api/events");
+  es = new EventSource(`api/events?layout=${kind}&tab=${tabId}`);
+  es.addEventListener("layout", e => { try { onLayout(JSON.parse(e.data)); } catch (err) { console.error(err); } });
   es.onmessage = e => { try { onState(JSON.parse(e.data)); } catch (err) { console.error(err); } };
   es.onerror = () => { if (!demo) setConn("", "disconnected, retrying…", "retrying"); };
 }

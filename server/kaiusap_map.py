@@ -9,11 +9,14 @@ else of kaiusap: no read, send, reply, iam, release, moot or pause.
 Serves the page on 127.0.0.1 and pushes state to it over Server-Sent Events.
 Polls only while at least one page is connected.
 
-One action besides reading: POST /api/focus brings a session's terminal
+Two actions besides reading. POST /api/focus brings a session's terminal
 window to the front (focus.py: Ghostty or Terminal.app, on macOS), for a
 session kaiusap reports in an attached tmux session, or outside tmux in a
 titled Ghostty split. It never touches kaiusap, and changes nothing in tmux:
-it only lists clients.
+it only lists clients. POST /api/layout saves where the map's sessions sit
+and which are pinned, one layout for desktops and one for phones, in
+layouts.json in the server's state folder; pin changes go on to the other
+open maps with the same layout. Neither touches kaiusap.
 
 Installed, it's the `kaiusap-map` command, with web/ beside this file; in the
 repo it runs as `python3 server/kaiusap_map.py`, with web/ one folder up.
@@ -33,11 +36,12 @@ import sys
 import threading
 import time
 import webbrowser
+from collections import deque
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote
 
 try:
     from . import focus  # installed: beside this file in the kaiusap_map package
@@ -232,6 +236,8 @@ class Hub:
         self.as_of = None    # the last listing's as_of, passed back as --since
         self.full_at = 0.0   # monotonic time of the last full listing
         self.payload = self._encode()
+        # Example data keeps its layout in the browser only.
+        self.layouts = None if demo else Layouts(self.cond, LAYOUT_FILE, lambda: [n["id"] for n in self.nodes])
 
     def _encode(self):
         return json.dumps({
@@ -304,6 +310,159 @@ class Hub:
             self.clients -= 1
 
 
+# ---------- layouts ----------
+
+LAYOUT_KEY = re.compile(r"[a-z]{1,16}")       # a layout's name: "desktop", "phone"
+TAB_ID = re.compile(r"[A-Za-z0-9-]{1,64}")    # a page's own id, so it can skip its own changes
+LAYOUT_KEYS = 8          # layouts kept at most
+LAYOUT_MAX = 2000        # sessions per layout
+LAYOUT_ID_MAX = 200      # characters in a session's id
+LAYOUT_DAYS = 30         # entries unseen this long are dropped
+LAYOUT_BODY = 512 * 1024 # bytes one save may send
+PIN_WRITE, FREE_WRITE = 2, 30  # seconds before a change is on disk: pins soon, settling places later
+
+
+def layout_entry(v):
+    """A clean {x, y, pinned} from a page's save, else None. x and y are fractions of the map's size."""
+    if not isinstance(v, dict):
+        return None
+    x, y, pinned = v.get("x"), v.get("y"), v.get("pinned")
+    for c in (x, y):
+        # A session dragged off the edge can sit a little outside 0..1; NaN fails the range check.
+        if isinstance(c, bool) or not isinstance(c, (int, float)) or not -10 <= c <= 10:
+            return None
+    if not isinstance(pinned, bool):
+        return None
+    return {"x": round(float(x), 4), "y": round(float(y), 4), "pinned": pinned}
+
+
+def pin_change(old, new):
+    """True when new pins, unpins or moves a pinned session: what other pages take on."""
+    if old is None:
+        return new["pinned"]
+    return old["pinned"] != new["pinned"] or (new["pinned"] and (old["x"], old["y"]) != (new["x"], new["y"]))
+
+
+class Layouts:
+    """The map's layouts by name: each session's place and whether it's pinned. Pages send only what
+    changed; pin changes are kept for the event streams, which pass them on to the other pages with
+    the same layout. Written to disk atomically, soon after a pin change, later for settling places."""
+
+    def __init__(self, cond, path, live_ids):
+        self.cond = cond          # the hub's: a pin change wakes the event streams
+        self.path = path
+        self.live_ids = live_ids  # ids of the sessions on the map now, which count as seen
+        self.layouts = self._load()
+        self.seq = 0
+        self.pushes = deque(maxlen=200)  # (seq, key, tab, entries) of recent pin changes
+        self.wcond = threading.Condition()
+        self.wlock = threading.Lock()  # one write at a time: the writer thread, or flush at shutdown
+        self.due = None           # monotonic time the next write is due
+        threading.Thread(target=self._writer, daemon=True).start()
+
+    def _load(self):
+        try:
+            data = json.loads(self.path.read_text())
+        except FileNotFoundError:
+            return {}
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"kaiusap-map: ignoring {self.path}: {e}", file=sys.stderr, flush=True)
+            return {}
+        layouts = data.get("layouts") if isinstance(data, dict) else None
+        out = {}
+        for key, lay in (layouts.items() if isinstance(layouts, dict) else []):
+            if not (isinstance(key, str) and LAYOUT_KEY.fullmatch(key) and isinstance(lay, dict)):
+                continue
+            out[key] = {}
+            for sid, v in lay.items():
+                e = layout_entry(v)
+                t = v.get("t") if isinstance(v, dict) else None
+                if e and isinstance(sid, str) and len(sid) <= LAYOUT_ID_MAX and isinstance(t, (int, float)):
+                    out[key][sid] = {**e, "t": t}
+        return out
+
+    def get(self, key):
+        """The layout's sessions without their timestamps, and whether the layout exists yet. Hold cond."""
+        lay = self.layouts.get(key)
+        return {sid: {k: v[k] for k in ("x", "y", "pinned")} for sid, v in (lay or {}).items()}, lay is None
+
+    def save(self, key, tab, entries):
+        """Merge one page's changed sessions. False when it would start a layout past LAYOUT_KEYS."""
+        with self.cond:
+            if key not in self.layouts and len(self.layouts) >= LAYOUT_KEYS:
+                return False
+            now = time.time()
+            lay = self.layouts.setdefault(key, {})
+            pins = {}
+            for sid, e in entries.items():
+                if pin_change(lay.get(sid), e):
+                    pins[sid] = e
+                lay[sid] = {**e, "t": now}
+            self._prune(lay, now)
+            if pins:
+                self.seq += 1
+                self.pushes.append((self.seq, key, tab, pins))
+                self.cond.notify_all()
+        self._schedule(PIN_WRITE if pins else FREE_WRITE)
+        return True
+
+    def _prune(self, lay, now):
+        # A session still on the map counts as seen, though a settled one sends nothing.
+        for sid in self.live_ids():
+            if sid in lay:
+                lay[sid]["t"] = now
+        for sid in [s for s, v in lay.items() if now - v["t"] > LAYOUT_DAYS * 86400]:
+            del lay[sid]
+        if len(lay) > LAYOUT_MAX:
+            for sid in sorted(lay, key=lambda s: lay[s]["t"])[:len(lay) - LAYOUT_MAX]:
+                del lay[sid]
+
+    def pushes_for(self, key, tab, seen):
+        """Pin changes after seen for this layout from other pages, merged; None when some are no
+        longer kept, so the page needs the whole layout. Hold cond."""
+        if self.pushes and self.pushes[0][0] > seen + 1:
+            return None
+        out = {}
+        for seq, k, t, entries in self.pushes:
+            if seq > seen and k == key and t != tab:
+                out.update(entries)
+        return out
+
+    def _schedule(self, delay):
+        with self.wcond:
+            due = time.monotonic() + delay
+            if self.due is None or due < self.due:
+                self.due = due
+                self.wcond.notify()
+
+    def _writer(self):
+        while True:
+            with self.wcond:
+                while self.due is None or time.monotonic() < self.due:
+                    self.wcond.wait(None if self.due is None else self.due - time.monotonic())
+                self.due = None
+            self._write()
+
+    def flush(self):
+        """Write now if a write is waiting; on shutdown."""
+        with self.wcond:
+            waiting, self.due = self.due is not None, None
+        if waiting:
+            self._write()
+
+    def _write(self):
+        with self.wlock:
+            with self.cond:
+                data = json.dumps({"schema": 1, "layouts": self.layouts}, separators=(",", ":"))
+            tmp = self.path.with_name(self.path.name + ".tmp")
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                tmp.write_text(data)
+                os.replace(tmp, self.path)
+            except OSError as e:
+                print(f"kaiusap-map: couldn't save layouts to {self.path}: {e}", file=sys.stderr, flush=True)
+
+
 def machine_name():
     """This machine's name for the summary title: its host name without .local, else its address."""
     name = socket.gethostname().strip()
@@ -350,6 +509,8 @@ def make_handler(hub, port, names=()):
                     or self.headers.get("Origin") not in allowed_origins
                     or self.headers.get("Content-Type", "").split(";")[0] != "application/json"):
                 return self.send_error(HTTPStatus.FORBIDDEN)
+            if self.path == "/api/layout":
+                return self.save_layout()
             if self.path != "/api/focus":
                 return self.send_error(HTTPStatus.NOT_FOUND)
             try:
@@ -376,6 +537,35 @@ def make_handler(hub, port, names=()):
                     ok, short, msg = False, "Failed", f"Couldn't reach the terminal: {e}"
             self.body(json.dumps({"ok": ok, "short": short, "message": msg}).encode(), "application/json")
 
+        def save_layout(self):
+            # {"key": "desktop", "tab": "<page id>", "nodes": {id: {x, y, pinned}}}: only the sessions
+            # that changed. Anything outside that shape is refused whole.
+            if not hub.layouts:
+                return self.send_error(HTTPStatus.NOT_FOUND)
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self.send_error(HTTPStatus.BAD_REQUEST)
+            if not 0 < n <= LAYOUT_BODY:
+                return self.send_error(HTTPStatus.REQUEST_ENTITY_TOO_LARGE if n > 0 else HTTPStatus.BAD_REQUEST)
+            try:
+                req = json.loads(self.rfile.read(n))
+            except (ValueError, json.JSONDecodeError):
+                return self.send_error(HTTPStatus.BAD_REQUEST)
+            key, tab, entries = (req.get(k) for k in ("key", "tab", "nodes")) if isinstance(req, dict) else (None,) * 3
+            if not (isinstance(key, str) and LAYOUT_KEY.fullmatch(key) and isinstance(tab, str)
+                    and TAB_ID.fullmatch(tab) and isinstance(entries, dict) and len(entries) <= LAYOUT_MAX):
+                return self.send_error(HTTPStatus.BAD_REQUEST)
+            clean = {}
+            for sid, v in entries.items():
+                e = layout_entry(v)
+                if e is None or len(sid) > LAYOUT_ID_MAX:
+                    return self.send_error(HTTPStatus.BAD_REQUEST)
+                clean[sid] = e
+            if not hub.layouts.save(key, tab, clean):
+                return self.send_error(HTTPStatus.BAD_REQUEST)
+            self.body(b'{"ok": true}', "application/json")
+
         def body(self, data, ctype):
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", ctype)
@@ -398,28 +588,58 @@ def make_handler(hub, port, names=()):
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
+            # A page that names its layout (?layout=desktop&tab=<its id>) gets that layout first, as a
+            # "layout" event, then other pages' pin changes to it as they happen. An older page names none.
+            q = parse_qs(self.path.partition("?")[2])
+            key, tab = (q.get("layout") or [""])[0], (q.get("tab") or [""])[0]
+            lay = hub.layouts if hub.layouts and LAYOUT_KEY.fullmatch(key) and TAB_ID.fullmatch(tab) else None
             hub.connect()
             try:
-                seen = -1
+                seen = lseen = -1
+                if lay:
+                    with hub.cond:
+                        entries, empty = lay.get(key)
+                        lseen = lay.seq
+                    self.layout_event(key, entries, empty=empty)
                 if hub.demo:
                     self.wfile.write(f"data: {hub.payload}\n\n".encode())
                     self.wfile.flush()
                     seen = hub.version
                 while True:
                     with hub.cond:
-                        if hub.version == seen:
+                        if hub.version == seen and (not lay or lay.seq == lseen):
                             hub.cond.wait(HEARTBEAT)
                         version, payload = hub.version, hub.payload
+                        pins = full = None
+                        if lay and lay.seq != lseen:
+                            pins = lay.pushes_for(key, tab, lseen)
+                            if pins is None:
+                                full = lay.get(key)[0]
+                            lseen = lay.seq
+                    sent = False
+                    if full is not None:
+                        self.layout_event(key, full, flush=False)
+                        sent = True
+                    elif pins:
+                        self.layout_event(key, pins, push=True, flush=False)
+                        sent = True
                     if version != seen and (version > 0 or hub.demo):
                         self.wfile.write(f"data: {payload}\n\n".encode())
                         seen = version
-                    else:
+                    elif not sent:
                         self.wfile.write(b": ping\n\n")
                     self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError):
                 pass
             finally:
                 hub.disconnect()
+
+        def layout_event(self, key, entries, empty=False, push=False, flush=True):
+            # push: only the sessions whose pins changed elsewhere; else the whole layout.
+            msg = json.dumps({"key": key, "nodes": entries, "empty": empty, "push": push})
+            self.wfile.write(f"event: layout\ndata: {msg}\n\n".encode())
+            if flush:
+                self.wfile.flush()
 
     return Handler
 
@@ -429,6 +649,7 @@ def make_handler(hub, port, names=()):
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "kaiusap-map"
 STATE_FILE = STATE_DIR / "server.json"
 LOG_FILE = STATE_DIR / "server.log"
+LAYOUT_FILE = STATE_DIR / "layouts.json"
 
 
 def read_state():
@@ -655,6 +876,8 @@ def main():
     finally:
         for srv in servers:
             srv.server_close()
+        if hub.layouts:
+            hub.layouts.flush()
 
 
 if __name__ == "__main__":
