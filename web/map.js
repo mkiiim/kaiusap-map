@@ -146,7 +146,7 @@ svg.on("pointerdown.marquee", e => {
   addEventListener("pointermove", move); addEventListener("pointerup", up);
 });
 
-const opts = { past: true, spawned: true, unnamed: true };
+const opts = { spawned: true, unnamed: true, near: false };
 let selected = null; // {type:'node'|'link', d}
 
 const sim = d3.forceSimulation()
@@ -171,11 +171,62 @@ function groupForce(k) {
   return force;
 }
 
-let vNodes = [], vLinks = [];
+// Last active (the funnel in the canvas controls): show only sessions and conversations active within a range. kaiusap gives no
+// "last active" time, so a session's is the newest of its last reply (context.at), its newest message either
+// way, and now while a turn runs or waits. A session that's running (kaiusap reports its activity, or it's in a
+// terminal), owes a reply or has unread mail always shows: those are the ones to act on. A session with no
+// time at all shows only under All; a spawned agent goes with the session that spawned it. A conversation
+// shows when its newest message is in range or a reply is still owed. Kept in this browser.
+// Each range: its minutes, its words ("in the last …") and its short form, beside the funnel.
+const RANGES = { day: [1440, "24 hours", "24 h"], "3d": [4320, "3 days", "3 d"], week: [10080, "week", "1 wk"], month: [43200, "month", "1 mo"], all: [Infinity, "", ""] };
+let range = "all", filterPlaced = false; // filterPlaced: placeFilter (below) is ready
+try { const r = localStorage.getItem("range"); if (Object.hasOwn(RANGES, r)) range = r; } catch (e) {}
+const rangeWords = () => `the last ${RANGES[range][1]}`;
+const RUNNING = new Set(["tmux", "not_in_tmux", "background"]);
+const keptByTime = n => n.owes || n.unread > 0 || !!n.activity || RUNNING.has(n.where);
+// Minutes since the session was last active, given each session's newest conversation in minutes.
+function sinceActive(n, talk) {
+  let m = talk.get(n.id) ?? Infinity;
+  if (n.context?.at) m = Math.min(m, (Date.now() - tms(n.context.at)) / 60000);
+  if (n.waiting || n.activity?.state === "working") m = 0;
+  return m;
+}
+let vNodes = [], vLinks = [], vBase = [];
 function visible() {
-  vNodes = nodes.filter(n => (opts.spawned || !n.spawned) && (opts.unnamed || n.named || n.holdsMail) && (opts.past || !n.released));
+  vBase = nodes.filter(n => (opts.spawned || !n.spawned) && (opts.unnamed || n.named || n.holdsMail));
+  const lim = RANGES[range][0], talk = new Map();
+  for (const l of links) if (!l.lineage) for (const id of [nid(l.source), nid(l.target)]) talk.set(id, Math.min(talk.get(id) ?? Infinity, l.last));
+  const inRange = n => lim === Infinity || keptByTime(n) || sinceActive(n, talk) <= lim;
+  const core = new Set(vBase.filter(n => !n.spawned && inRange(n)).map(n => n.id)), shown = new Set(core);
+  // With their direct connections: one step out from the sessions in range, along any conversation however old.
+  const near = opts.near && lim !== Infinity, inBase = new Set(vBase.map(n => n.id));
+  const touches = l => core.has(nid(l.source)) || core.has(nid(l.target));
+  if (near) for (const l of links) if (!l.lineage && touches(l)) for (const id of [nid(l.source), nid(l.target)]) if (inBase.has(id)) shown.add(id);
+  vNodes = vBase.filter(n => n.spawned ? shown.has(n.spawned) || inRange(n) : shown.has(n.id));
   const ids = new Set(vNodes.map(n => n.id));
-  vLinks = links.filter(l => ids.has(l.source.id ?? l.source) && ids.has(l.target.id ?? l.target) && (opts.past || l.last < 120 || l.open));
+  vLinks = links.filter(l => ids.has(l.source.id ?? l.source) && ids.has(l.target.id ?? l.target)
+    && (l.lineage || l.open || l.last <= lim || (near && touches(l))));
+}
+// The panel's choices and count, and the funnel: lit, with the range beside it, while one is set.
+function showRange() {
+  document.querySelectorAll("#range [data-range]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === range)));
+  // All already shows every connection: the box is ticked and greyed there, and comes back as it was on a range.
+  const nearBox = document.getElementById("opt-near"); nearBox.disabled = range === "all"; nearBox.checked = opts.near || range === "all";
+  const on = range !== "all", btn = document.getElementById("btn-filter"), lab = document.getElementById("filter-label");
+  const what = on ? `Showing ${vNodes.length} of ${vBase.length} sessions, those active in ${rangeWords()}${opts.near ? " and the sessions they've talked to" : ""}.`
+    : `Showing all ${vBase.length} sessions.`;
+  btn.classList.toggle("on", on);
+  lab.hidden = !on; lab.textContent = on ? RANGES[range][2] : "";
+  btn.title = `Filter by when sessions were last active. ${what}`;
+  btn.setAttribute("aria-label", btn.title);
+  document.getElementById("filter-count").textContent = what;
+  if (filterPlaced) placeFilter(); // the label's width can change whether it fits
+}
+function setRange(r) {
+  range = r;
+  try { localStorage.setItem("range", r); } catch (e) {}
+  render(0.1);
+  select(selected);
 }
 
 let linkSel, hitSel, flowSel, nodeSel, hullSel;
@@ -247,7 +298,12 @@ function render(alpha = 0.8) {
   sim.alpha(alpha).restart();
   const empty = document.getElementById("empty");
   empty.hidden = vNodes.length > 0 || !lastUpdate;
-  empty.textContent = nodes.length ? "Every session is hidden by the filters." : "kaiusap lists no sessions.";
+  const html = !nodes.length ? "kaiusap lists no sessions."
+    : vBase.length ? `<div>No sessions were active in ${rangeWords()}.<button type="button" id="range-all">Show all</button></div>`
+    : "Every session is hidden by the filters.";
+  // Rewritten only when it changes, so a focused Show all keeps its focus through updates.
+  if (empty.dataset.html !== html) { empty.innerHTML = html; empty.dataset.html = html; }
+  showRange();
 }
 function key(l) { return (l.source.id ?? l.source) + ">" + (l.target.id ?? l.target); }
 
@@ -1436,8 +1492,12 @@ d3.timer(() => {
 // ---------- controls ----------
 try { if (localStorage.getItem("show-unnamed") === "0") { opts.unnamed = false; document.getElementById("opt-unnamed").checked = false; } } catch (e) {}
 document.getElementById("opt-unnamed").addEventListener("change", e => { opts.unnamed = e.target.checked; try { localStorage.setItem("show-unnamed", opts.unnamed ? "1" : "0"); } catch (err) {} render(); });
-document.getElementById("opt-past").addEventListener("change", e => { opts.past = e.target.checked; render(); });
 document.getElementById("opt-spawned").addEventListener("change", e => { opts.spawned = e.target.checked; render(); });
+document.querySelectorAll("#range [data-range]").forEach(b => b.addEventListener("click", () => setRange(b.dataset.range)));
+const nearEl = document.getElementById("opt-near");
+try { if (localStorage.getItem("range-near") === "1") nearEl.checked = opts.near = true; } catch (e) {}
+nearEl.addEventListener("change", e => { opts.near = e.target.checked; try { localStorage.setItem("range-near", opts.near ? "1" : "0"); } catch (err) {} render(0.1); select(selected); });
+document.getElementById("empty").addEventListener("click", e => { if (e.target.closest("#range-all")) setRange("all"); });
 // Theme: System follows the OS; Light or Dark overrides it (index.html sets data-theme before paint).
 const themeButtons = document.querySelectorAll("#theme [data-theme-choice]");
 const showTheme = () => themeButtons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.themeChoice === window.kaiusapTheme.get())));
@@ -1515,10 +1575,14 @@ function marked(text, hits) {
   for (const [a, b] of hits) { out += esc(text.slice(at, a)) + "<mark>" + esc(text.slice(a, b)) + "</mark>"; at = b; }
   return out + esc(text.slice(at));
 }
+// Sessions the Last active range hides are found too, marked as such; picking one shows all again.
 function searchCandidates() {
-  const out = [], groups = new Map();
-  for (const n of vNodes) {
-    out.push({ kind: "session", n, name: label(n), alt: [n.name, n.handle, n.dir], sub: [n.name && n.name !== label(n) ? n.name : null, n.groupLabel].filter(Boolean).join(" · ") });
+  const out = [], groups = new Map(), shown = new Set(vNodes);
+  for (const n of vBase) {
+    const hid = !shown.has(n);
+    out.push({ kind: "session", n, name: label(n), alt: [n.name, n.handle, n.dir],
+      sub: [n.name && n.name !== label(n) ? n.name : null, n.groupLabel, hid && `not active in ${rangeWords()}`].filter(Boolean).join(" · ") });
+    if (hid) continue;
     if (!groups.has(n.project)) groups.set(n.project, { kind: "repo", p: n.project, name: groupLabel(n.project), alt: [n.project, n.dir], sub: (n.project || "").replace(/^\/Users\/[^/]+/, "~"), members: [] });
     groups.get(n.project).members.push(n);
   }
@@ -1575,6 +1639,7 @@ function pick(r, add = false) {
   if (!r) return;
   closeResults();
   qEl.blur();
+  if (r.kind === "session" && !vNodes.includes(r.n)) setRange("all");
   const ns = r.kind === "session" ? [r.n] : r.members.filter(n => vNodes.includes(n));
   if (add) setPicked(new Set([...basePick(), ...ns]));
   else if (ns.length > 1) setPicked(new Set(ns));
@@ -1681,6 +1746,32 @@ document.addEventListener("keydown", e => {
   e.preventDefault();
 });
 showZoom(d3.zoomTransform(svg.node()).k);
+
+// ---------- filter panel ----------
+// The funnel's panel, a disclosure like View options: closes on Escape, an outside click or focus leaving it.
+const filterBtn = document.getElementById("btn-filter"), filterEl = document.getElementById("filter");
+const inFilter = el => el?.closest?.("#filter, #btn-filter");
+function setFilter(open, refocus) {
+  filterEl.hidden = !open;
+  filterBtn.setAttribute("aria-expanded", String(open));
+  if (open) filterEl.querySelector('[aria-pressed="true"]')?.focus();
+  else if (refocus) filterBtn.focus();
+}
+filterBtn.addEventListener("click", () => setFilter(filterEl.hidden));
+// The funnel goes last in the canvas's control row while the row has room for it; otherwise (a narrow phone,
+// where the other seven already fill the row) it sits alone in the canvas's top right corner. Checked whenever
+// the canvas changes size or the funnel's label does: put it in the row, and move it out if it wrapped.
+const ctlRow = document.querySelector(".mapctl"), filterCtl = document.getElementById("filterctl");
+function placeFilter() {
+  if (filterCtl.parentElement !== ctlRow) { ctlRow.insertBefore(filterCtl, document.getElementById("key")); filterCtl.classList.remove("corner"); }
+  const top = el => Math.round(el.getBoundingClientRect().top);
+  if (Math.abs(top(filterCtl) - top(ctlRow.firstElementChild)) > 2) { stageEl.appendChild(filterCtl); filterCtl.classList.add("corner"); }
+}
+filterPlaced = true;
+new ResizeObserver(placeFilter).observe(stageEl);
+filterEl.addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); setFilter(false, true); } });
+document.addEventListener("pointerdown", e => { if (!filterEl.hidden && !inFilter(e.target)) setFilter(false); });
+filterEl.addEventListener("focusout", e => { if (!filterEl.hidden && e.relatedTarget && !inFilter(e.relatedTarget)) setFilter(false); });
 
 // ---------- view options menu ----------
 // A disclosure, not an ARIA menu: it holds checkboxes and a switch. Closes on Escape, outside click or focus leaving it.
@@ -2027,7 +2118,8 @@ function onState(s) {
   }
   seenIds = ids;
 }
-setInterval(() => { if (demo || !links.length) return; refreshAges(); render(0); select(selected); }, 60000);
+// Once a minute, so lines fade and sessions leave the Last active range as they age.
+setInterval(() => { if (demo || (!links.length && range === "all")) return; refreshAges(); render(0); select(selected); }, 60000);
 
 // Connect only while the tab is visible; the server polls only while a page is connected.
 let es = null;

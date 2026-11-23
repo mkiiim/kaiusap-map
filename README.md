@@ -161,7 +161,7 @@ Click a line, or a conversation in a session's panel, to see its messages groupe
 
 The panel and the Key open as sheets from the bottom of the screen, one at a time.
 
-The menu (☰) shows or hides sessions with no handle and past conversations, and switches between light, dark and system mode.
+The menu (☰) shows or hides sessions with no handle, and switches between light, dark and system mode. The funnel beside the zoom controls filters by when sessions were last active: the last 24 hours, 3 days, week or month. A session's last activity is its last reply or its newest message. Sessions that are running, owe a reply or have unread mail always show. With their direct connections also shows every session that has talked to one in the range, and that conversation, however old. While a range is set the funnel is lit and names it; search still finds the hidden sessions.
 
 ## Key
 

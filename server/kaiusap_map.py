@@ -22,7 +22,7 @@ Installed, it's the `kaiusap-map` command, with web/ beside this file; in the
 repo it runs as `python3 server/kaiusap_map.py`, with web/ one folder up.
 """
 
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 
 import argparse
 import json
