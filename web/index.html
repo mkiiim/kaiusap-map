@@ -380,6 +380,29 @@ svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: n
 .search-results .kind { font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-text-mid); text-transform: uppercase; letter-spacing: 0.06em; align-self: center; }
 .search-results .sub { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 0.7rem; color: var(--color-text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-results .none { cursor: default; color: var(--color-text-mid); font-size: 0.83rem; }
+/* Phones (the bottom sheet): Session and This machine are two sections and only one is open (kaiusap-map).
+   The other folds: the session to its first two lines, its type and name; This machine to its title row
+   and its four cards, short and without chevrons, still stepping through their sessions. The open one takes
+   the rest of the sheet and scrolls, so the sheet's own handle sizes it, and This machine's grip goes. The
+   short cards put the number beside the label where all four fit, and above it where they don't. */
+#dock-mini { display: none; }
+@media (max-width: 760px) {
+  aside:has(> #dock[open]:not(.closing)) #panel { flex: none; overflow: hidden; cursor: pointer; }
+  aside:has(> #dock[open]:not(.closing)) #panel > :not(.panel-head) { display: none; }
+  aside:has(> #dock[open]:not(.closing)) #dock { flex: 1; min-height: 0; overflow-y: auto; }
+  #dock .grip { display: none; }
+  #dock-body { max-height: none !important; overflow: visible !important; }
+  #dock-mini { display: flex; gap: 8px; margin-top: -10px; overflow: hidden; flex-shrink: 0; }
+  aside:has(> #dock[open]:not(.closing)) #dock-mini { display: none !important; }
+  #dock-mini .stat { flex: 1 0 auto; justify-content: center; min-height: var(--target-min); padding: 0 7px; }
+  #dock-mini .stat.lit { padding: 0 6px; }
+  #dock-mini .stat-step { flex: none; flex-direction: row; align-items: baseline; gap: 4px; min-height: 0; min-width: 0; white-space: nowrap; }
+  #dock-mini .stat b { font-size: 1.05rem; line-height: 1.15; }
+  #dock-mini .stat span { font-size: 0.68rem; line-height: 1.2; }
+  #dock-mini.stack { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #dock-mini.stack .stat { min-height: 48px; }
+  #dock-mini.stack .stat-step { flex-direction: column; align-items: flex-start; gap: 0; white-space: normal; }
+}
 @media (max-width: 760px) {
   main { flex-direction: column; }
   .search { flex: 1 1 160px; }
@@ -544,6 +567,7 @@ svg#map { user-select: none; -webkit-user-select: none; -webkit-touch-callout: n
       <summary>This machine</summary>
       <div id="dock-body"></div>
     </details>
+    <div id="dock-mini" role="group" aria-label="This machine's counts"></div>
   </aside>
 </main>
 <div class="ctx" id="ctx" role="menu" hidden></div>

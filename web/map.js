@@ -836,9 +836,13 @@ let shown = null;
 // `from` is the session whose panel opened this conversation; its panel offers a way back to it.
 let backTo = null;
 const selKey = s => !s ? "" : s.type === "node" ? `node:${s.d.id}` : s.type === "pick" ? "pick" : `link:${key(s.d)}`;
+// Phones show one of Session and This machine at a time (see the dock, below). A session reached from the
+// open dock's cards or lists keeps the dock open; one picked anywhere else opens Session.
+let fromDock = false;
 function select(s, from = null) {
   const same = shown !== null && selKey(s) === shown;
   if (!same) { focusMsg.clear(); backTo = from; }
+  if (!same && shown !== null && !fromDock) setMachine(!s);
   const top = panel.scrollTop;
   selected = s;
   shown = selKey(s);
@@ -886,7 +890,7 @@ function goTo(n) {
 // A tap on a card's body gives a brief sign it landed: the card presses in and its tint flashes. The dock
 // redraws on the step, so this finds the new card. Under reduced motion only the tint flashes.
 function tapped(kind) {
-  const card = document.querySelector(`[data-step="${kind}"]`)?.closest(".stat");
+  const card = [...document.querySelectorAll(`[data-step="${kind}"]`)].find(b => b.getClientRects().length)?.closest(".stat");
   if (!card) return;
   const cs = getComputedStyle(card), rest = cs.backgroundColor, tint = cs.getPropertyValue("--stat-tint").trim();
   // brightness too, so the flash shows on a card already filled with its tint
@@ -928,6 +932,7 @@ function statList(kind) {
 }
 document.addEventListener("click", e => {
   const step = e.target.closest("[data-step]"), list = e.target.closest("[data-list]"), go = e.target.closest("[data-goto]");
+  fromDock = !!e.target.closest("#dock");
   if (step) { stepStat(step.dataset.step); tapped(step.dataset.step); }
   else if (list) {
     const next = statOpen === list.dataset.list ? null : list.dataset.list;
@@ -947,6 +952,7 @@ document.addEventListener("click", e => {
       if (nu) ease(nu, "height", oldH, nu.scrollHeight); // from nothing, or from the list it replaces
     }
   } else if (go) { const n = nodes.find(x => x.id === go.dataset.goto); if (n) goTo(n); }
+  fromDock = false;
 });
 function summary() {
   const named = nodes.filter(n => n.named && !n.spawned && !n.released);
@@ -957,9 +963,12 @@ function summary() {
   const unread = d3.sum(named, n => n.unread);
   // Each card's border echoes the mark it counts on the map; a count of zero keeps the plain border.
   // A card with sessions on the map steps through them when its body is clicked; its chevron lists them.
-  const stat = (n, label, kind) => {
+  const stat = (n, label, kind, short) => {
     const go = statSessions(kind).length, what = label === "replies owed" ? "session that owes a reply" : label + " session";
     const body = `<b>${n}</b><span>${label}</span>`;
+    if (short) return `<div class="stat${n ? ` lit is-${kind}` : ""}" role="group" aria-label="${n} ${label}">${go
+      ? `<button type="button" class="stat-step" data-step="${kind}" title="Show each ${what} in turn" aria-label="Show the next ${what} (${n} ${label})">${body}</button>`
+      : `<div class="stat-step">${body}</div>`}</div>`;
     return `<div class="stat${n ? ` lit is-${kind}` : ""}${go && statOpen === kind ? " listing" : ""}" role="group" aria-label="${n} ${label}">${go
       ? `<button type="button" class="stat-step" data-step="${kind}" title="Show each ${what} in turn" aria-label="Show the next ${what} (${n} ${label})">${body}</button>`
       : `<div class="stat-step">${body}</div>`}<button type="button" class="stat-toggle" data-list="${kind}" aria-expanded="${go && statOpen === kind}" aria-controls="stat-list" aria-label="List the ${what}s" title="List them"${go ? "" : " disabled"}>${CHEVRON}</button></div>`;
@@ -971,8 +980,10 @@ function summary() {
       ${stat(owed, "replies owed", "owed")}
       ${demo ? "" : stat(unnamed.length, "unnamed", "unnamed")}
     </div>${statOpen && statSessions(statOpen).length ? statList(statOpen) : ""}`;
+  const mini = stat(reach, "reachable", "reach", true) + stat(unread, "unread", "unread", true)
+    + stat(owed, "replies owed", "owed", true) + (demo ? "" : stat(unnamed.length, "unnamed", "unnamed", true));
   const tally = demo ? "" : `${liveMessages.length} message${liveMessages.length === 1 ? "" : "s"} in ${links.length} conversation${links.length === 1 ? "" : "s"}.${lastUpdate ? ` Updated ${new Date(lastUpdate).toLocaleTimeString()}.` : ""}`;
-  return { title, stats, tally };
+  return { title, stats, tally, mini };
 }
 // With nothing selected, the panel shows a session card's shape with no session in it: the same heading, pill and
 // fields as sessionPanel, dimmed, with "—" for each value, so the panel keeps one layout and shows what a click
@@ -991,10 +1002,21 @@ function overview() {
       ${TEMPLATE_FIELDS.map(f => `<dt>${f}</dt><dd>—</dd>`).join("")}
     </dl>`;
 }
-const dockEl = document.getElementById("dock");
+const dockEl = document.getElementById("dock"), miniEl = document.getElementById("dock-mini");
+// The folded dock's short cards sit in one row, number beside label, where all four fit, else stacked.
+let miniW = 0;
+function fitMini(force) {
+  const w = miniEl.clientWidth;
+  if (!w || (!force && w === miniW)) return;
+  miniW = w;
+  miniEl.classList.remove("stack");
+  if (miniEl.scrollWidth > w + 1) miniEl.classList.add("stack");
+}
+new ResizeObserver(() => fitMini()).observe(miniEl);
 function renderDock() {
-  const { title, stats, tally } = summary();
+  const { title, stats, tally, mini } = summary();
   document.getElementById("dock-body").innerHTML = `<p class="dock-title">${esc(title)}</p>${stats}${tally ? `<p class="note">${esc(tally)}</p>` : ""}`;
+  if (miniEl.dataset.html !== mini) { miniEl.innerHTML = mini; miniEl.dataset.html = mini; fitMini(true); }
 }
 function renderLegend() {
   // Four groups, set apart by space and a faint rule: sessions, whether mail reaches them,
@@ -1872,8 +1894,17 @@ function resize() {
 new ResizeObserver(resize).observe(stage);
 resize();
 renderLegend();
-try { if (localStorage.getItem("dock-open") === "0") dockEl.open = false; } catch (e) {}
-dockEl.addEventListener("toggle", () => { try { localStorage.setItem("dock-open", dockEl.open ? "1" : "0"); } catch (e) {} });
+// On a wide screen the dock stays as the viewer left it. On a phone it's one of two sections (see the styles): it
+// opens with nothing selected and folds when a session is picked, and a tap on the folded session opens that again.
+const dockSaved = () => { try { return localStorage.getItem("dock-open") !== "0"; } catch (e) { return true; } };
+dockEl.open = narrow() ? !selected : dockSaved();
+dockEl.addEventListener("toggle", () => { if (!narrow()) try { localStorage.setItem("dock-open", dockEl.open ? "1" : "0"); } catch (e) {} });
+function setMachine(open) {
+  if (!narrow() || open === (dockEl.open && !dockEl.classList.contains("closing"))) return;
+  dockEl.querySelector("summary").click(); // the same eased open or close as a tap on its title
+}
+panel.addEventListener("click", e => { if (narrow() && dockEl.open && !e.target.closest("a, button")) setMachine(false); });
+matchMedia("(max-width: 760px)").addEventListener("change", e => { dockEl.classList.remove("closing"); dockEl.open = e.matches ? !selected : dockSaved(); });
 // The dock and the legend open and close smoothly: the body's height eases between 0 and its own, over the
 // dock's 0.22s --ease-out. The chevron turns at the start either way. No motion under prefers-reduced-motion.
 function smoothDetails(el) {
@@ -1924,7 +1955,7 @@ function dockSizer(el, key) {
   const clamp = (h, from) => Math.max(48, Math.min(h, body.scrollHeight, from + panel.getBoundingClientRect().height - 80));
   let dragged = false;
   const start = (e, src, threshold) => {
-    if (!el.open || el.classList.contains("closing") || e.button) return;
+    if (!el.open || el.classList.contains("closing") || e.button || (el === dockEl && narrow())) return;
     const y0 = e.clientY, h0 = body.getBoundingClientRect().height;
     let live = !threshold, last = null, frame = 0;
     const begin = () => { live = true; src.setPointerCapture(e.pointerId); grip.classList.add("active"); document.body.style.cursor = "row-resize"; };
