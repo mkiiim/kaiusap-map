@@ -83,7 +83,9 @@ button.icon { padding: 6px 7px; }
    its panel opens downwards. */
 .filterctl.corner { position: absolute; top: 12px; right: max(12px, env(safe-area-inset-right, 0px)); z-index: 6; }
 .filterctl.corner .filter-pop { top: calc(100% + var(--space-2)); bottom: auto; }
-.filter-count { margin: 2px 0 0; font-size: var(--text-xs); color: var(--color-text-mid); }
+/* One short line, so the panel keeps its size and its buttons stay put whatever is picked; the full sentence is the funnel's title. */
+.filter-pop { width: 240px; }
+.filter-count { margin: 2px 0 0; font-size: var(--text-xs); color: var(--color-text-mid); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (pointer: coarse) and (max-width: 760px) { #filter-label { display: none !important; } }
 /* Right-click on a session: one item, at the pointer, over everything. */
 .ctx { position: fixed; z-index: 40; min-width: 180px; max-width: 320px; padding: 4px;
