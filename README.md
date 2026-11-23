@@ -137,6 +137,8 @@ The panel on the side shows what you've selected, and the **This machine** card 
 
 Collapse the panel when you don't need it, or drag its top edge to change its size.
 
+On a phone, the session and **This machine** take turns: one is open and the other folds. A folded session shows its type and name; tap it to open it. A folded **This machine** keeps its four cards, smaller and without their lists, so you can still step through their sessions. Picking a session opens it, and clearing the selection opens **This machine**.
+
 ### Arrange it
 
 - Drag a circle, or a selected group, to move it; conversation partners follow, and where you drop it, it stays. Double-click to let it go again.
