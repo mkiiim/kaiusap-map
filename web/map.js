@@ -219,7 +219,7 @@ function showRange() {
   lab.hidden = !on; lab.textContent = on ? RANGES[range][2] : "";
   btn.title = `Filter by when sessions were last active. ${what}`;
   btn.setAttribute("aria-label", btn.title);
-  document.getElementById("filter-count").textContent = what;
+  document.getElementById("filter-count").textContent = `${vNodes.length} of ${vBase.length} sessions shown`;
   if (filterPlaced) placeFilter(); // the label's width can change whether it fits
 }
 function setRange(r) {
